@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>イラストカードバトル</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== タイトル画面 ===== -->
+<section id="screen-title" class="screen active">
+  <div class="center-box">
+    <h1>🃏 イラストカードバトル</h1>
+    <p id="title-info" class="note"></p>
+    <button id="btn-start" class="btn">ゲーム開始</button>
+    <button id="btn-create" class="btn">カード作成</button>
+    <button id="btn-deck" class="btn">デッキ編成</button>
+  </div>
+</section>
+
+<!-- ===== カード作成画面 ===== -->
+<section id="screen-create" class="screen">
+  <h2>カード作成</h2>
+
+  <label>イラスト画像</label>
+  <input type="file" id="f-img" accept="image/*">
+  <div id="f-preview" class="preview">画像未選択</div>
+
+  <label>カード名</label>
+  <input type="text" id="f-name" maxlength="12" placeholder="例:ねこ戦士">
+
+  <label>HP</label>
+  <input type="number" id="f-hp" inputmode="numeric" min="1" placeholder="例:80">
+
+  <h3>攻撃①</h3>
+  <label>攻撃名</label>
+  <input type="text" id="f-a1name" maxlength="12" placeholder="例:パンチ">
+  <div class="two">
+    <div><label>コスト</label><input type="number" id="f-a1cost" inputmode="numeric" min="0" placeholder="例:2"></div>
+    <div><label>ダメージ</label><input type="number" id="f-a1dmg" inputmode="numeric" min="0" placeholder="例:30"></div>
+  </div>
+
+  <h3>攻撃②</h3>
+  <label>攻撃名</label>
+  <input type="text" id="f-a2name" maxlength="12" placeholder="例:必殺パンチ">
+  <div class="two">
+    <div><label>コスト</label><input type="number" id="f-a2cost" inputmode="numeric" min="0" placeholder="例:4"></div>
+    <div><label>ダメージ</label><input type="number" id="f-a2dmg" inputmode="numeric" min="0" placeholder="例:60"></div>
+  </div>
+
+  <button id="btn-save-card" class="btn">保存</button>
+  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+</section>
+
+<!-- ===== デッキ編成画面 ===== -->
+<section id="screen-deck" class="screen">
+  <h2>デッキ編成</h2>
+  <p class="note">キャラクターカードを10枚えらんでください(タップで選択)。</p>
+  <p id="deck-count" class="count"></p>
+  <div id="deck-list" class="grid"></div>
+  <button id="btn-sample" class="btn ghost">お試し用サンプルカードを追加</button>
+  <button id="btn-save-deck" class="btn">デッキを保存</button>
+  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+</section>
+
+<!-- ===== バトル画面 ===== -->
+<section id="screen-battle" class="screen">
+  <div id="c-info" class="info"></div>
+  <div id="c-field" class="field"></div>
+  <div id="center">
+    <div id="turn-label"></div>
+    <div id="log"></div>
+  </div>
+  <div id="p-field" class="field"></div>
+  <div id="p-info" class="info"></div>
+  <div class="row">
+    <button id="btn-end" class="btn small">ターン終了</button>
+    <button id="btn-quit" class="btn small ghost">やめる</button>
+  </div>
+  <div id="p-hand"></div>
+</section>
+
+<!-- ===== 勝敗画面 ===== -->
+<section id="screen-result" class="screen">
+  <div class="center-box">
+    <h1 id="result-title"></h1>
+    <button id="btn-again" class="btn">もう一度遊ぶ</button>
+    <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+  </div>
+</section>
+
+<!-- ===== メニュー(カードをタップしたとき) ===== -->
+<div id="menu"><div id="menu-panel"></div></div>
+
+<script src="game.js"></script>
+</body>
+</html>
