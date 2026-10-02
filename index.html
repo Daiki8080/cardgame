@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>イラストカードバトル</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 
@@ -17,6 +17,18 @@
     <button id="btn-create" class="btn">カード作成</button>
     <button id="btn-deck" class="btn">デッキ編成</button>
   </div>
+</section>
+
+<!-- ===== 対戦準備画面(デッキをえらぶ) ===== -->
+<section id="screen-ready" class="screen">
+  <h2>対戦準備</h2>
+  <label>あなたのデッキ</label>
+  <select id="sel-player"></select>
+  <label>CPUのデッキ</label>
+  <select id="sel-cpu"></select>
+  <p id="ready-msg" class="note"></p>
+  <button id="btn-battle" class="btn">バトル開始</button>
+  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
 </section>
 
 <!-- ===== カード作成画面 ===== -->
@@ -55,13 +67,28 @@
 
 <!-- ===== デッキ編成画面 ===== -->
 <section id="screen-deck" class="screen">
-  <h2>デッキ編成</h2>
-  <p class="note">キャラクターカードを10枚えらんでください(タップで選択)。</p>
-  <p id="deck-count" class="count"></p>
-  <div id="deck-list" class="grid"></div>
-  <button id="btn-sample" class="btn ghost">お試し用サンプルカードを追加</button>
-  <button id="btn-save-deck" class="btn">デッキを保存</button>
-  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+
+  <!-- デッキの一覧 -->
+  <div id="deck-manage">
+    <h2>デッキ編成</h2>
+    <p class="note">デッキはいくつでも作れます。1つのデッキは、キャラクターカード10枚です。</p>
+    <div id="deck-rows"></div>
+    <button id="btn-new-deck" class="btn">＋ 新しいデッキを作る</button>
+    <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+  </div>
+
+  <!-- デッキをつくる・直す -->
+  <div id="deck-edit" class="hidden">
+    <h2>デッキをつくる</h2>
+    <label>デッキの名前</label>
+    <input type="text" id="f-deckname" maxlength="12" placeholder="例:ねこデッキ">
+    <p class="note">キャラクターカードを10枚えらんでください(タップで選択)。</p>
+    <p id="deck-count" class="count"></p>
+    <div id="deck-list" class="grid"></div>
+    <button id="btn-sample" class="btn ghost">お試し用サンプルカードを追加</button>
+    <button id="btn-save-deck" class="btn">このデッキを保存</button>
+    <button id="btn-back-deck" class="btn ghost">一覧にもどる</button>
+  </div>
 </section>
 
 <!-- ===== バトル画面 ===== -->
@@ -76,6 +103,7 @@
   <div id="p-info" class="info"></div>
   <div class="row">
     <button id="btn-end" class="btn small">ターン終了</button>
+    <button id="btn-cancel" class="btn small ghost" style="display:none">キャンセル</button>
     <button id="btn-quit" class="btn small ghost">やめる</button>
   </div>
   <div id="p-hand"></div>
@@ -86,6 +114,7 @@
   <div class="center-box">
     <h1 id="result-title"></h1>
     <button id="btn-again" class="btn">もう一度遊ぶ</button>
+    <button class="btn ghost" data-go="ready">デッキをえらび直す</button>
     <button class="btn ghost" data-go="title">タイトルへ戻る</button>
   </div>
 </section>
@@ -93,6 +122,6 @@
 <!-- ===== メニュー(カードをタップしたとき) ===== -->
 <div id="menu"><div id="menu-panel"></div></div>
 
-<script src="game.js"></script>
+<script src="game.js?v=2"></script>
 </body>
 </html>
