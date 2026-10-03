@@ -832,3 +832,4 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 #detail-text { white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.8; color: #eee; margin-bottom: 18px; }
 #detail-close { width: auto; padding: 8px 16px; }
 #detail-close2 { width: 100%; }
+#detail-text { min-height: 6em; }

@@ -201,7 +201,7 @@ function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? 
 
 // キャラクター情報があるカードにだけ出す、小さな【詳細】ボタン(押すと情報が表示される)
 // (キャラクター情報か、トリミング前の元画像があるカードに出す)
-const hasDetail = c => !!(c.info || c.full);
+const hasDetail = c => c.type !== "item" && c.type !== "cost";   // キャラのカードには、すべて【詳細】を付ける
 const DETAIL_REG = {};   // 【詳細】ボタンの鍵 → カード(戦闘中なら、いまのHPなどが入った本物)
 function detailBtn(c) {
   if (!hasDetail(c)) return "";
@@ -297,8 +297,8 @@ function showDetail(c) {
     skill("①", c.a1) + skill("②", c.a2);
   const info = c.info || "";
   $("detail-text").textContent = info;
-  $("detail-info").style.display = info ? "" : "none";
-  $("detail-hint").textContent = info ? "▼ 下にスクロールすると、キャラクター情報" : "";
+  $("detail-info").style.display = "";   // 情報が空でも、欄は出す(何も書かれていない状態)
+  $("detail-hint").textContent = "▼ 下にスクロールすると、キャラクター情報";
   $("detail-stage").classList.remove("hide-over");
   // 2人対戦で上の人のターンのときは、逆向きに出す
   const flip = !!G && isPvp() && G.turn === "cpu" && $("screen-battle").classList.contains("active");
