@@ -143,6 +143,12 @@ function deckValid(d) { return deckParts(d).normals.length === DECK_CHAR; }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
+// 大きいカード用: トリミング前の元画像があればそれを、なければカードの画像を、全体表示する
+function artFullHTML(c) {
+  const src = c.full || c.img;
+  if (src) return `<img class="whole" src="${src}" alt="">`;
+  return `<div class="emoji">${c.emoji || "❓"}</div>`;
+}
 function artHTML(c) {
   if (c.img) return `<img src="${c.img}" alt="">`;
   return `<div class="emoji">${c.emoji || "❓"}</div>`;
@@ -196,9 +202,12 @@ function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? 
 // キャラクター情報があるカードにだけ出す、小さな【詳細】ボタン(押すと情報が表示される)
 // (キャラクター情報か、トリミング前の元画像があるカードに出す)
 const hasDetail = c => !!(c.info || c.full);
+const DETAIL_REG = {};   // 【詳細】ボタンの鍵 → カード(戦闘中なら、いまのHPなどが入った本物)
 function detailBtn(c) {
   if (!hasDetail(c)) return "";
-  return `<button class="detail-btn" data-src="${esc(c.srcId || c.id || "")}" data-name="${esc(c.name)}" data-info="${esc(c.info || "")}">【詳細】</button>`;
+  const k = c.uid ? "u" + c.uid : "s" + c.id;
+  DETAIL_REG[k] = c;
+  return `<button class="detail-btn" data-k="${k}">【詳細】</button>`;
 }
 
 // 小さいカード(手札・場・デッキ編成で使う)  inField=true なら「行動ずみ」の暗い表示もする
@@ -260,20 +269,34 @@ function bigCardHTML(c, mini, compact) {
     <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
     <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div>`;
   const hasInfo = hasDetail(c) ? " has-info" : "";
-  return `<div class="${cls}${hasInfo}"><div class="bart">${artHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
+  return `<div class="${cls}${hasInfo}"><div class="bart">${artFullHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
 }
 
 // ---------- キャラクター情報(【詳細】ボタン) ----------
-function showDetail(name, info, srcId) {
+function showDetail(c) {
+  if (!c) return;
   // 大きく見せる画像は、トリミング前の元画像(なければカードの画像)
-  const src = loadCards().find(x => x.id === srcId);
-  let art = "";
-  if (src && (src.full || src.img)) art = `<img src="${src.full || src.img}" alt="">`;
-  else if (src && src.emoji) art = `<div class="emoji">${src.emoji}</div>`;
+  const src = c.full || c.img;
+  const art = src ? `<img src="${src}" alt="">` : (c.emoji ? `<div class="emoji">${c.emoji}</div>` : "");
   $("detail-art").innerHTML = art;
   $("detail-art").style.display = art ? "" : "none";
-  $("detail-name").textContent = name;
-  $("detail-text").textContent = info || "";
+  $("detail-name").textContent = c.name;
+  // HP・ゲージ・技(名前/コスト/ダメージ)
+  const max = c.maxHp || c.hp;
+  const m = c.plush ? 2 : 1;
+  const pw = isPower(c) || c.power;
+  let baseName = c.baseName || "";
+  if (pw && !baseName && c.baseId) { const bc = loadCards().find(x => x.id === c.baseId); baseName = bc ? bc.name : ""; }
+  const st = (c.guard ? "🛡防御中 " : "") + (c.amulet ? "🧿お守り中 " : "") + (c.plush ? "🧸次の攻撃2倍 " : "") + (c.decoy > 0 ? "🎭身代わり中 " : "");
+  const skill = (n, sk) => { sk = normSkill(sk); return `<div class="dsk"><b>${n} ${esc(sk.name)}</b><span>${skillDetail(sk, m)}</span></div>`; };
+  $("detail-stats").innerHTML =
+    `<div class="dhp">HP <b>${Math.max(0, c.hp)}</b> / ${max}<small>(いまのHP / 元のHP)</small></div>` +
+    barHTML({}, c.hp, max, "big") +
+    (pw ? `<div class="dnote gold">⬆️パワーアップ(元:${esc(baseName)} / 置き換え💎${c.upCost || 0})</div>` : "") +
+    (st ? `<div class="dnote">${st}</div>` : "") +
+    skill("①", c.a1) + skill("②", c.a2);
+  const info = c.info || "";
+  $("detail-text").textContent = info;
   $("detail-text").style.display = info ? "" : "none";
   // 2人対戦で上の人のターンのときは、逆向きに出す
   const flip = !!G && isPvp() && G.turn === "cpu" && $("screen-battle").classList.contains("active");
@@ -288,7 +311,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest ? e.target.closest(".detail-btn") : null;
   if (!b) return;
   e.stopPropagation();
-  showDetail(b.dataset.name, b.dataset.info, b.dataset.src);
+  showDetail(DETAIL_REG[b.dataset.k]);
 }, true);
 
 // ---------- ④ 画面切り替え ----------
