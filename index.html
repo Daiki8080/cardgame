@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>イラストカードバトル</title>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
@@ -35,6 +35,21 @@
 <section id="screen-create" class="screen">
   <h2>カード作成</h2>
 
+  <label>カードの種類</label>
+  <select id="f-kind">
+    <option value="normal">通常カード</option>
+    <option value="power">パワーアップカード</option>
+  </select>
+
+  <!-- パワーアップカードのときだけ出る -->
+  <div id="power-fields" class="hidden power-box">
+    <label>どの通常カードから置き換える?</label>
+    <select id="f-base"></select>
+    <label>置き換えのコスト(💎)</label>
+    <input type="number" id="f-upcost" inputmode="numeric" min="0" placeholder="例:3">
+    <p id="power-msg" class="note"></p>
+  </div>
+
   <label>イラスト画像</label>
   <input type="file" id="f-img" accept="image/*">
   <div id="f-preview" class="preview">画像未選択</div>
@@ -45,21 +60,41 @@
   <label>HP</label>
   <input type="number" id="f-hp" inputmode="numeric" min="1" placeholder="例:80">
 
-  <h3>攻撃①</h3>
-  <label>攻撃名</label>
+  <!-- 技① -->
+  <h3>技①</h3>
+  <label>技の種類</label>
+  <select id="f-a1type">
+    <option value="attack">攻撃(相手1体にダメージ)</option>
+    <option value="heal">回復(味方1体のHP回復)</option>
+    <option value="all">全体攻撃(相手全員にダメージ)</option>
+    <option value="sacrifice">捨て身(相手1体に大ダメージ、自分も受ける)</option>
+    <option value="chance">確率攻撃(相手1体に、一定の確率でダメージ)</option>
+  </select>
+  <label>技の名前</label>
   <input type="text" id="f-a1name" maxlength="12" placeholder="例:パンチ">
   <div class="two">
     <div><label>コスト</label><input type="number" id="f-a1cost" inputmode="numeric" min="0" placeholder="例:2"></div>
-    <div><label>ダメージ</label><input type="number" id="f-a1dmg" inputmode="numeric" min="0" placeholder="例:30"></div>
+    <div><label id="l-a1v1">ダメージ</label><input type="number" id="f-a1v1" inputmode="numeric" min="0" placeholder="例:30"></div>
   </div>
+  <div id="w-a1v2" class="hidden"><label id="l-a1v2"></label><input type="number" id="f-a1v2" inputmode="numeric" min="0" placeholder="数字"></div>
 
-  <h3>攻撃②</h3>
-  <label>攻撃名</label>
+  <!-- 技② -->
+  <h3>技②</h3>
+  <label>技の種類</label>
+  <select id="f-a2type">
+    <option value="attack">攻撃(相手1体にダメージ)</option>
+    <option value="heal">回復(味方1体のHP回復)</option>
+    <option value="all">全体攻撃(相手全員にダメージ)</option>
+    <option value="sacrifice">捨て身(相手1体に大ダメージ、自分も受ける)</option>
+    <option value="chance">確率攻撃(相手1体に、一定の確率でダメージ)</option>
+  </select>
+  <label>技の名前</label>
   <input type="text" id="f-a2name" maxlength="12" placeholder="例:必殺パンチ">
   <div class="two">
     <div><label>コスト</label><input type="number" id="f-a2cost" inputmode="numeric" min="0" placeholder="例:4"></div>
-    <div><label>ダメージ</label><input type="number" id="f-a2dmg" inputmode="numeric" min="0" placeholder="例:60"></div>
+    <div><label id="l-a2v1">ダメージ</label><input type="number" id="f-a2v1" inputmode="numeric" min="0" placeholder="例:60"></div>
   </div>
+  <div id="w-a2v2" class="hidden"><label id="l-a2v2"></label><input type="number" id="f-a2v2" inputmode="numeric" min="0" placeholder="数字"></div>
 
   <button id="btn-save-card" class="btn">保存</button>
   <button class="btn ghost" data-go="title">タイトルへ戻る</button>
@@ -71,7 +106,7 @@
   <!-- デッキの一覧 -->
   <div id="deck-manage">
     <h2>デッキ編成</h2>
-    <p class="note">デッキはいくつでも作れます。1つのデッキは、キャラクターカード10枚です。</p>
+    <p class="note">デッキはいくつでも作れます。1つのデッキは、通常カード10枚です(パワーアップカードは、通常カードと合わせて1枚の扱い)。</p>
     <div id="deck-rows"></div>
     <button id="btn-new-deck" class="btn">＋ 新しいデッキを作る</button>
     <button class="btn ghost" data-go="title">タイトルへ戻る</button>
@@ -82,9 +117,9 @@
     <h2>デッキをつくる</h2>
     <label>デッキの名前</label>
     <input type="text" id="f-deckname" maxlength="12" placeholder="例:ねこデッキ">
-    <p class="note">キャラクターカードを10枚えらんでください(タップで選択)。</p>
+    <p class="note">通常カードを10枚えらんでください(タップで選択)。</p>
     <p id="deck-count" class="count"></p>
-    <div id="deck-list" class="grid"></div>
+    <div id="deck-list"></div>
     <button id="btn-sample" class="btn ghost">お試し用サンプルカードを追加</button>
     <button id="btn-save-deck" class="btn">このデッキを保存</button>
     <button id="btn-back-deck" class="btn ghost">一覧にもどる</button>
@@ -122,6 +157,17 @@
 <!-- ===== メニュー(カードをタップしたとき) ===== -->
 <div id="menu"><div id="menu-panel"></div></div>
 
-<script src="game.js?v=2"></script>
+<!-- ===== コイントス(バトル開始のとき) ===== -->
+<div id="coin-overlay" class="hidden">
+  <div class="coin-box">
+    <div id="coin" class="coin">
+      <div class="face f">表</div>
+      <div class="face b">裏</div>
+    </div>
+    <div id="coin-text">コイントス!</div>
+  </div>
+</div>
+
+<script src="game.js?v=3"></script>
 </body>
 </html>

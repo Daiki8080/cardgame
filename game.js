@@ -8,13 +8,16 @@
 // ============================================================
 
 // ---------- ① 設定とデータ ----------
-const DECK_CHAR = 10;    // 自分で選ぶキャラクターカードの枚数
-const ITEM_COUNT = 10;   // バトル開始時に入るアイテムカードの枚数
-const COST_COUNT = 20;   // バトル開始時に入るコストカードの枚数
+const DECK_CHAR = 10;    // 自分で選ぶ「通常カード」の枚数
+const DECK_TOTAL = 40;   // バトルで使うデッキの合計枚数(パワーアップを入れたぶん、アイテムとコストを減らす)
+const MAX_POWER = 10;    // デッキに入れられるパワーアップカードの数
 const FIELD_MAX = 3;     // 場に出せるキャラの数
 const START_HP = 100;    // プレイヤーの最初のHP
 const START_HAND = 5;    // 最初の手札の枚数
 const REVIVE_MAX = 2;    // 「キャラ復活」アイテムは1デッキに何枚まで入るか
+const LASER_COST = 2;    // レーザーを使うのに必要な💎
+const LASER_LOCK = 1;    // 自分の最初の何ターンは、レーザーを使えないか
+const DECOY_TURNS = 2;   // 身代わりが続く、相手のターンの数
 const GEM_MAX = 6;       // 💎をこの数まで並べて表示。これより多いと「💎+7」のように数字で表示
 const SPEED = 1;         // ゲームの進む速さ。大きいほどゆっくり(2にすると2倍ゆっくり)
 
@@ -29,47 +32,67 @@ const ITEMS = [
   { kind: "healPlayer", name: "HP回復",     icon: "💚", short: "自分HP+50",   desc: "自分のHPを50回復する" },
   { kind: "healChar",   name: "キャラ回復", icon: "💊", short: "キャラHP+50", desc: "場のキャラ1枚のHPを50回復する" },
   { kind: "revive",     name: "キャラ復活", icon: "✨", short: "ダウン→手札", desc: "ダウンしたキャラ1枚を手札に戻す(HP全回復)" },
-  { kind: "bomb",       name: "爆弾",       icon: "💣", short: "相手全体30",  desc: "相手の場にいるキャラ全員に30ダメージ" },
+  { kind: "bomb",       name: "爆弾",       icon: "💣", short: "相手全体30",  desc: "相手の場にいるキャラ全員に30ダメージ(防御中は半分)" },
   { kind: "amulet",     name: "お守り",     icon: "🧿", short: "次の被攻撃0", desc: "場のキャラ1枚が、次の相手ターンに攻撃を受けても0ダメージになる" },
   { kind: "plush",      name: "ぬいぐるみ", icon: "🧸", short: "次の攻撃2倍", desc: "場のキャラ1枚の次の攻撃は、コストが2倍になる代わりにダメージも2倍になる" },
-  { kind: "laser",      name: "レーザー",   icon: "⚡", short: "相手HP-30",   desc: "相手プレイヤーのHPに30ダメージ" },
-  { kind: "swap",       name: "交代",       icon: "🔄", short: "場⇔手札",     desc: "場のキャラと手札のキャラを入れかえる。手札に戻ったキャラはHPが50回復する" },
+  { kind: "laser",      name: "レーザー",   icon: "⚡", short: "相手HP-30",   desc: "相手プレイヤーのHPに30ダメージ。💎を2つ使う。自分の最初のターンは使えない" },
+  { kind: "swap",       name: "交代",       icon: "🔄", short: "場⇔手札",     desc: "場のキャラと手札のキャラを入れかえる。手札に戻ったキャラはHPが50回復する(パワーアップ中のキャラは対象外)" },
+  { kind: "decoy",      name: "身代わり",   icon: "🎭", short: "2ターン囮",   desc: "場のキャラ1枚を選ぶ。2ターンの間、相手はそのキャラしか攻撃対象にえらべなくなる" },
 ];
 
-// [名前, 絵文字, HP, 攻撃1名, コスト, ダメージ, 攻撃2名, コスト, ダメージ]
-function toCard(a) {
-  return { name: a[0], emoji: a[1], hp: a[2],
-    a1: { name: a[3], cost: a[4], dmg: a[5] },
-    a2: { name: a[6], cost: a[7], dmg: a[8] } };
-}
+// 技のつくり方(カードのデータを書きやすくするための道具)
+const A  = (name, cost, dmg) => ({ type: "attack", name, cost, dmg });                 // 攻撃
+const H  = (name, cost, heal) => ({ type: "heal", name, cost, heal });                 // 回復
+const AL = (name, cost, dmg) => ({ type: "all", name, cost, dmg });                    // 全体攻撃
+const SA = (name, cost, dmg, self) => ({ type: "sacrifice", name, cost, dmg, self });  // 捨て身
+const CH = (name, cost, dmg, pct) => ({ type: "chance", name, cost, dmg, pct });       // 確率攻撃
+const mkCard = (name, emoji, hp, a1, a2) => ({ name, emoji, hp, a1, a2 });
+const mkPower = (name, emoji, hp, baseName, upCost, a1, a2) =>
+  ({ kind: "power", name, emoji, hp, baseName, upCost, a1, a2 });
 
 // お試し用サンプルカード(自分のカードを作る前に遊んでみる用)
 const SAMPLE_CARDS = [
-  ["ねこ戦士", "🐱", 70, "ひっかき", 1, 20, "ねこパンチ", 3, 45],
-  ["いぬ剣士", "🐶", 80, "かみつき", 2, 30, "ダッシュ斬り", 4, 55],
-  ["うさぎ魔法使い", "🐰", 50, "ほしの光", 1, 15, "ムーンビーム", 3, 40],
-  ["パンダ力士", "🐼", 100, "つっぱり", 2, 25, "どすこい", 5, 60],
-  ["ライオン王", "🦁", 90, "ほえる", 2, 30, "王のいかり", 4, 60],
-  ["とら闘士", "🐯", 75, "きばの一撃", 2, 35, "しま連撃", 4, 55],
-  ["かえる忍者", "🐸", 55, "したのムチ", 1, 20, "水しゅりけん", 3, 40],
-  ["ペンギン兵", "🐧", 65, "ダイブ", 1, 20, "こおりの槍", 3, 45],
-  ["ユニコーン", "🦄", 60, "つの突き", 2, 30, "にじの光", 4, 50],
-  ["かめ守護者", "🐢", 110, "こうら当て", 2, 20, "大ぼうそう", 5, 50],
-].map(toCard);
+  mkCard("ねこ戦士", "🐱", 70, A("ひっかき", 1, 20), A("ねこパンチ", 3, 45)),
+  mkCard("いぬ剣士", "🐶", 80, A("かみつき", 2, 30), A("ダッシュ斬り", 4, 55)),
+  mkCard("うさぎ魔法使い", "🐰", 50, A("ほしの光", 1, 15), H("いやしの光", 2, 30)),
+  mkCard("パンダ力士", "🐼", 100, A("つっぱり", 2, 25), SA("体当たり", 3, 70, 25)),
+  mkCard("ライオン王", "🦁", 90, A("ほえる", 2, 30), AL("王のいかり", 5, 30)),
+  mkCard("とら闘士", "🐯", 75, A("きばの一撃", 2, 35), A("しま連撃", 4, 55)),
+  mkCard("かえる忍者", "🐸", 55, A("したのムチ", 1, 20), CH("水しゅりけん", 2, 50, 60)),
+  mkCard("ペンギン兵", "🐧", 65, A("ダイブ", 1, 20), A("こおりの槍", 3, 45)),
+  mkCard("ユニコーン", "🦄", 60, A("つの突き", 2, 30), H("にじの光", 3, 40)),
+  mkCard("かめ守護者", "🐢", 110, A("こうら当て", 2, 20), A("大ぼうそう", 5, 50)),
+];
+const SAMPLE_POWERS = [
+  mkPower("キャットロード", "😼", 110, "ねこ戦士", 3, A("ひっかき連打", 1, 30), AL("ねこ大乱舞", 4, 35)),
+  mkPower("いぬ騎士王", "🐕", 120, "いぬ剣士", 4, A("王の牙", 2, 40), CH("必殺ダッシュ", 3, 90, 60)),
+];
 
-// CPUが使うキャラクターカード(「おまかせ」を選んだときに使う)
+// CPUが使うカード(「おまかせ」を選んだときに使う)
 const CPU_CARDS = [
-  ["ドラゴン", "🐲", 90, "ひのこ", 2, 30, "ほのおのブレス", 4, 60],
-  ["きつね", "🦊", 60, "ひっかき", 1, 20, "きつね火", 3, 40],
-  ["おおかみ", "🐺", 75, "かみつき", 2, 30, "とおぼえ斬", 4, 55],
-  ["ふくろう", "🦉", 55, "つばさ打ち", 1, 20, "ぎんの羽", 3, 40],
-  ["くま", "🐻", 100, "ひっかき", 2, 25, "ベアハグ", 4, 55],
-  ["へび", "🐍", 50, "どくきば", 1, 15, "しめつけ", 3, 40],
-  ["わし", "🦅", 65, "急降下", 2, 30, "かぜの刃", 4, 50],
-  ["タコ", "🐙", 70, "すみ吐き", 1, 20, "うで連打", 3, 45],
-  ["ロボ", "🤖", 85, "パンチ", 2, 25, "レーザー", 4, 55],
-  ["おばけ", "👻", 45, "おどろかし", 1, 15, "のろい", 3, 40],
-].map(toCard);
+  mkCard("ドラゴン", "🐲", 90, A("ひのこ", 2, 30), A("ほのおのブレス", 4, 60)),
+  mkCard("きつね", "🦊", 60, A("ひっかき", 1, 20), CH("きつね火", 2, 45, 70)),
+  mkCard("おおかみ", "🐺", 75, A("かみつき", 2, 30), A("とおぼえ斬", 4, 55)),
+  mkCard("ふくろう", "🦉", 55, A("つばさ打ち", 1, 20), H("ぎんの羽", 2, 30)),
+  mkCard("くま", "🐻", 100, A("ひっかき", 2, 25), AL("ほえる大地", 5, 30)),
+  mkCard("へび", "🐍", 50, A("どくきば", 1, 15), CH("しめつけ", 2, 40, 60)),
+  mkCard("わし", "🦅", 65, A("急降下", 2, 30), A("かぜの刃", 4, 50)),
+  mkCard("タコ", "🐙", 70, A("すみ吐き", 1, 20), A("うで連打", 3, 45)),
+  mkCard("ロボ", "🤖", 85, A("パンチ", 2, 25), A("レーザー", 4, 55)),
+  mkCard("おばけ", "👻", 45, A("おどろかし", 1, 15), SA("のろい", 2, 55, 20)),
+].map(c => ({ ...c, id: "cpu:" + c.name }));
+const CPU_POWERS = [
+  mkPower("竜王", "🐉", 130, "ドラゴン", 4, A("ほのお玉", 2, 40), AL("ごうかのブレス", 5, 40)),
+  mkPower("九尾", "🔮", 90, "きつね", 3, A("きつね乱れ火", 2, 35), CH("神かくし", 3, 90, 60)),
+].map(c => ({ ...c, id: "cpu:" + c.name, baseId: "cpu:" + c.baseName }));
+
+// 昔のカード(技の種類がないもの)も動くように、技のデータをそろえる
+function normSkill(s) {
+  s = s || {};
+  return { type: s.type || "attack", name: s.name || "", cost: s.cost || 0,
+    dmg: s.dmg || 0, heal: s.heal || 0, self: s.self || 0, pct: s.pct == null ? 100 : s.pct };
+}
+const isPower = c => c.kind === "power";
 
 // ---------- ② 保存(スマホのブラウザの中に保存されます) ----------
 function loadCards() {
@@ -105,11 +128,16 @@ function loadSel() {
 function saveSel(s) {
   try { localStorage.setItem("cb_sel", JSON.stringify(s)); } catch (e) { /* 保存できなくても遊べる */ }
 }
-// デッキに入っているカードの中身を取り出す(消したカードは除く)
-function deckCards(d) {
+// デッキの中身を「通常カード」と「パワーアップカード」に分ける(消したカードや、元の通常カードがないものは除く)
+function deckParts(d) {
   const cards = loadCards();
-  return d.ids.map(id => cards.find(c => c.id === id)).filter(Boolean);
+  const all = d.ids.map(id => cards.find(c => c.id === id)).filter(Boolean);
+  const normals = all.filter(c => !isPower(c));
+  const powers = all.filter(c => isPower(c) && normals.some(n => n.id === c.baseId));
+  return { normals, powers };
 }
+function deckCards(d) { const p = deckParts(d); return p.normals.concat(p.powers); }
+function deckValid(d) { return deckParts(d).normals.length === DECK_CHAR; }
 
 // ---------- ③ カードの見た目 ----------
 function esc(s) {
@@ -137,6 +165,27 @@ function barHTML(obj, cur, max, cls, text) {
   return `<div class="bar ${cls || ""}"><i class="${col}" style="width:${from}%" data-to="${to}"></i><b>${esc(label)}</b></div>`;
 }
 
+// 技の短い表示(カードの上に小さく出す)  m はぬいぐるみの倍率
+function skillShort(sk, m) {
+  const mm = sk.type === "heal" ? 1 : m;
+  const c = sk.cost * mm;
+  if (sk.type === "heal") return `💎${c} 💚${sk.heal}`;
+  if (sk.type === "all") return `💎${c} 🌪${sk.dmg * mm}`;
+  if (sk.type === "sacrifice") return `💎${c} 🔥${sk.dmg * mm}/${sk.self}`;
+  if (sk.type === "chance") return `💎${c} 🎲${sk.dmg * mm}`;
+  return `💎${c} 💥${sk.dmg * mm}`;
+}
+// 技の くわしい説明(大きいカードに出す)
+function skillDetail(sk, m) {
+  const mm = sk.type === "heal" ? 1 : m;
+  const c = sk.cost * mm;
+  if (sk.type === "heal") return `回復 / 💎${c} / 💚+${sk.heal}(味方1体)`;
+  if (sk.type === "all") return `全体攻撃 / 💎${c} / 💥${sk.dmg * mm}(相手全員)`;
+  if (sk.type === "sacrifice") return `捨て身 / 💎${c} / 💥${sk.dmg * mm}(自分は${sk.self}ダメージ)`;
+  if (sk.type === "chance") return `確率攻撃 / 💎${c} / 💥${sk.dmg * mm}(成功${sk.pct}%)`;
+  return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
+}
+
 // 小さいカード(手札・場・デッキ編成で使う)  inField=true なら「行動ずみ」の暗い表示もする
 function cardHTML(c, extra, inField) {
   extra = extra || "";
@@ -149,38 +198,50 @@ function cardHTML(c, extra, inField) {
   }
   const max = c.maxHp || c.hp;
   const m = c.plush ? 2 : 1;   // ぬいぐるみ中は、コストもダメージも2倍で表示
+  const pw = c.power || isPower(c);
   let cls = "card char";
-  if (inField && (c.acted || c.canAct === false)) cls += " done";
+  if (inField && c.acted) cls += " done";
+  if (pw) cls += " power";
   if (c.guard) cls += " guard";
   if (c.amulet) cls += " amulet";
   if (c.plush) cls += " plush";
+  if (c.decoy > 0) cls += " decoy";
   if (G && G.acting === c.uid) cls += " acting";
-  const badges = (c.guard ? "🛡" : "") + (c.amulet ? "🧿" : "") + (c.plush ? "🧸" : "");
+  const badges = (pw ? "⬆️" : "") + (c.guard ? "🛡" : "") + (c.amulet ? "🧿" : "") + (c.plush ? "🧸" : "") + (c.decoy > 0 ? "🎭" : "");
   return `<div class="${cls}${targetable}${extra}" data-uid="${c.uid || ""}">
     <div class="art">${artHTML(c)}</div>
     ${badges ? `<div class="badge">${badges}</div>` : ""}
     <div class="cname">${esc(c.name)}</div>
     ${barHTML(c, c.hp, max, "")}
-    <div class="catk">①💎${c.a1.cost * m} 💥${c.a1.dmg * m}</div>
-    <div class="catk">②💎${c.a2.cost * m} 💥${c.a2.dmg * m}</div>
+    <div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
+    <div class="catk">②${skillShort(normSkill(c.a2), m)}</div>
     ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}</div>`;
 }
 
-// 大きいカード(タップしたときのメニューに表示)
-function bigCardHTML(c) {
+// 大きいカード(タップしたときのメニューに表示)  mini=true なら、並べて見られる小さめ版
+function bigCardHTML(c, mini) {
+  const cls = "big" + (mini ? " mini" : "");
   if (c.type === "item" || c.type === "cost") {
-    return `<div class="big"><div class="bart">${c.icon}</div>
+    return `<div class="${cls}"><div class="bart">${c.icon}</div>
       <div class="bname">${esc(c.name)}</div><div class="batk">${esc(c.desc)}</div></div>`;
   }
   const max = c.maxHp || c.hp;
   const m = c.plush ? 2 : 1;
-  const st = (c.guard ? " 🛡防御中" : "") + (c.amulet ? " 🧿お守り中" : "") + (c.plush ? " 🧸次の攻撃2倍" : "");
-  return `<div class="big"><div class="bart">${artHTML(c)}</div>
+  const st = (c.guard ? " 🛡防御中" : "") + (c.amulet ? " 🧿お守り中" : "") + (c.plush ? " 🧸次の攻撃2倍" : "") + (c.decoy > 0 ? " 🎭身代わり中" : "");
+  const pw = c.power || isPower(c);
+  let power = "";
+  if (pw) {
+    const bn = c.baseName || "";
+    power = `<div class="batk gold">⬆️パワーアップ(元:${esc(bn)} / 置き換え💎${c.upCost || 0})</div>`;
+  }
+  const under = c.under ? `<div class="batk">下のカード:${esc(c.under.name)}</div>` : "";
+  return `<div class="${cls}"><div class="bart">${artHTML(c)}</div>
     <div class="bname">${esc(c.name)}</div>
     ${barHTML({}, c.hp, max, "big")}
+    ${power}${under}
     ${st ? `<div class="batk">${st}</div>` : ""}
-    <div class="batk">① ${esc(c.a1.name)}(💎${c.a1.cost * m} / 💥${c.a1.dmg * m})</div>
-    <div class="batk">② ${esc(c.a2.name)}(💎${c.a2.cost * m} / 💥${c.a2.dmg * m})</div></div>`;
+    <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
+    <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div></div>`;
 }
 
 // ---------- ④ 画面切り替え ----------
@@ -207,9 +268,50 @@ $("btn-again").onclick = () => startBattle();
 // ---------- ⑤ カード作成 ----------
 let currentImg = "";
 
+// 技の種類ごとに、入力欄の名前を変える
+const SKILL_FORM = {
+  attack:    { v1: "ダメージ" },
+  heal:      { v1: "回復量" },
+  all:       { v1: "ダメージ" },
+  sacrifice: { v1: "相手へのダメージ", v2: "自分が受けるダメージ" },
+  chance:    { v1: "ダメージ", v2: "成功する確率(%)" },
+};
+function updateSkillForm(p) {   // p は "a1" か "a2"
+  const f = SKILL_FORM[$("f-" + p + "type").value] || SKILL_FORM.attack;
+  $("l-" + p + "v1").textContent = f.v1;
+  if (f.v2) {
+    $("l-" + p + "v2").textContent = f.v2;
+    $("w-" + p + "v2").classList.remove("hidden");
+  } else {
+    $("w-" + p + "v2").classList.add("hidden");
+  }
+}
+["a1", "a2"].forEach(p => $("f-" + p + "type").addEventListener("change", () => updateSkillForm(p)));
+
+// 通常カード / パワーアップカード で、入力欄を切りかえる
+function updateKindForm() {
+  const power = $("f-kind").value === "power";
+  if (power) {
+    const normals = loadCards().filter(c => !isPower(c));
+    $("f-base").innerHTML = normals.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    $("power-msg").textContent = normals.length ? "" : "先に通常カードを作ってください。";
+    $("power-fields").classList.remove("hidden");
+  } else {
+    $("power-fields").classList.add("hidden");
+  }
+}
+$("f-kind").addEventListener("change", updateKindForm);
+
 function resetCreateForm() {
   currentImg = "";
-  ["f-name", "f-hp", "f-a1name", "f-a1cost", "f-a1dmg", "f-a2name", "f-a2cost", "f-a2dmg"].forEach(id => $(id).value = "");
+  ["f-name", "f-hp", "f-upcost"].forEach(id => $(id).value = "");
+  ["a1", "a2"].forEach(p => {
+    $("f-" + p + "type").value = "attack";
+    ["name", "cost", "v1", "v2"].forEach(k => $("f-" + p + k).value = "");
+    updateSkillForm(p);
+  });
+  $("f-kind").value = "normal";
+  updateKindForm();
   $("f-img").value = "";
   $("f-preview").textContent = "画像未選択";
 }
@@ -238,22 +340,48 @@ $("f-img").addEventListener("change", e => {
   reader.readAsDataURL(file);
 });
 
+// 入力された技を読みとって、ゲームで使う形にする。まちがいがあれば文字(エラー)を返す
+function readSkill(p, no) {
+  const type = $("f-" + p + "type").value;
+  const name = $("f-" + p + "name").value.trim();
+  const cost = parseInt($("f-" + p + "cost").value, 10);
+  const v1 = parseInt($("f-" + p + "v1").value, 10);
+  const v2 = parseInt($("f-" + p + "v2").value, 10);
+  const f = SKILL_FORM[type];
+  if (!name) return `技${no}の名前を入力してください`;
+  if (!(cost >= 0)) return `技${no}のコストは0以上の数字で入力してください`;
+  if (!(v1 >= 0)) return `技${no}の「${f.v1}」は0以上の数字で入力してください`;
+  if (type === "sacrifice" && !(v2 >= 0)) return `技${no}の「${f.v2}」は0以上の数字で入力してください`;
+  if (type === "chance" && !(v2 >= 1 && v2 <= 100)) return `技${no}の「${f.v2}」は1〜100の数字で入力してください`;
+  if (type === "heal") return { type, name, cost, heal: v1 };
+  if (type === "sacrifice") return { type, name, cost, dmg: v1, self: v2 };
+  if (type === "chance") return { type, name, cost, dmg: v1, pct: v2 };
+  return { type, name, cost, dmg: v1 };   // 攻撃・全体攻撃
+}
+
 $("btn-save-card").onclick = () => {
+  const kind = $("f-kind").value;
   const name = $("f-name").value.trim();
   const hp = parseInt($("f-hp").value, 10);
-  const a1 = { name: $("f-a1name").value.trim(), cost: parseInt($("f-a1cost").value, 10), dmg: parseInt($("f-a1dmg").value, 10) };
-  const a2 = { name: $("f-a2name").value.trim(), cost: parseInt($("f-a2cost").value, 10), dmg: parseInt($("f-a2dmg").value, 10) };
-
   if (!currentImg) return alert("イラスト画像を選んでください");
   if (!name) return alert("カード名を入力してください");
   if (!(hp >= 1)) return alert("HPは1以上の数字で入力してください");
-  for (const a of [a1, a2]) {
-    if (!a.name) return alert("攻撃名を入力してください");
-    if (!(a.cost >= 0) || !(a.dmg >= 0)) return alert("コストとダメージは0以上の数字で入力してください");
-  }
+  const a1 = readSkill("a1", "①");
+  if (typeof a1 === "string") return alert(a1);
+  const a2 = readSkill("a2", "②");
+  if (typeof a2 === "string") return alert(a2);
 
+  const card = { id: "c" + Date.now(), kind: kind, name: name, img: currentImg, hp: hp, a1: a1, a2: a2 };
+  if (kind === "power") {
+    const baseId = $("f-base").value;
+    const upCost = parseInt($("f-upcost").value, 10);
+    if (!baseId) return alert("置き換え元の通常カードをえらんでください");
+    if (!(upCost >= 0)) return alert("置き換えのコストは0以上の数字で入力してください");
+    card.baseId = baseId;
+    card.upCost = upCost;
+  }
   const cards = loadCards();
-  cards.push({ id: "c" + Date.now(), name: name, img: currentImg, hp: hp, a1: a1, a2: a2 });
+  cards.push(card);
   if (!saveCards(cards)) return;
   alert("カードを保存しました!");
   resetCreateForm();
@@ -261,7 +389,7 @@ $("btn-save-card").onclick = () => {
 
 // ---------- ⑥ デッキ編成(デッキはいくつでも作れる) ----------
 let editId = null;     // 編集中のデッキの番号(新しく作るときは null)
-let deckSel = [];      // いまえらんでいるカードの番号
+let deckSel = [];      // いまえらんでいるカードの番号(通常カードもパワーアップカードも入る)
 
 // デッキの一覧を表示
 function renderDeckManage() {
@@ -271,9 +399,9 @@ function renderDeckManage() {
   $("deck-rows").innerHTML = decks.length === 0
     ? '<p class="note">まだデッキがありません。「新しいデッキを作る」を押してください。</p>'
     : decks.map(d => {
-        const n = deckCards(d).length;
-        const warn = n === DECK_CHAR ? "" : " ⚠ 10枚に足りません";
-        return `<div class="deck-row"><div class="dname">${esc(d.name)}<small>${n}/${DECK_CHAR}枚${warn}</small></div>
+        const p = deckParts(d);
+        const warn = p.normals.length === DECK_CHAR ? "" : " ⚠ 通常カードが10枚に足りません";
+        return `<div class="deck-row"><div class="dname">${esc(d.name)}<small>通常${p.normals.length}/${DECK_CHAR}枚 + パワーアップ${p.powers.length}枚${warn}</small></div>
           <button class="btn small" data-edit="${d.id}">編集</button>
           <button class="btn small danger" data-deldeck="${d.id}">削除</button></div>`;
       }).join("");
@@ -303,22 +431,69 @@ function openDeckEdit(id) {
   window.scrollTo(0, 0);
 }
 
+function countSel(wantPower) {
+  const cards = loadCards();
+  return deckSel.filter(id => { const c = cards.find(x => x.id === id); return c && isPower(c) === wantPower; }).length;
+}
+
+// 通常カードとパワーアップカードを分けて表示
 function drawDeckList() {
   const cards = loadCards();
-  $("deck-count").textContent = `選択中:${deckSel.length} / ${DECK_CHAR}`;
+  const normals = cards.filter(c => !isPower(c));
+  const powers = cards.filter(isPower);
+  $("deck-count").textContent = `通常カード:${countSel(false)} / ${DECK_CHAR}　パワーアップ:${countSel(true)}枚`;
   if (cards.length === 0) {
     $("deck-list").innerHTML = '<p class="note">まだカードがありません。「カード作成」で作るか、下のサンプルカードを追加してください。</p>';
     return;
   }
-  $("deck-list").innerHTML = cards.map(c => {
+  const item = (c, cap) => {
     const sel = deckSel.includes(c.id) ? " selected" : "";
-    return `<div class="deck-item" data-id="${c.id}">${cardHTML(c, sel)}<button class="del" data-del="${c.id}">削除</button></div>`;
-  }).join("");
+    return `<div class="deck-item" data-id="${c.id}">${cardHTML(c, sel)}${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<button class="del" data-del="${c.id}">削除</button></div>`;
+  };
+  let h = "<h3>通常カード</h3>";
+  h += normals.length ? `<div class="grid">${normals.map(c => item(c, "")).join("")}</div>` : '<p class="note">通常カードがありません。</p>';
+  h += "<h3>パワーアップカード</h3>";
+  h += '<p class="note">えらぶと、元の通常カードと合わせて1枚として数えます。</p>';
+  h += powers.length
+    ? `<div class="grid">${powers.map(c => {
+        const b = cards.find(x => x.id === c.baseId);
+        return item(c, b ? `元:${b.name} / 💎${c.upCost}` : "(元のカードがありません)");
+      }).join("")}</div>`
+    : '<p class="note">パワーアップカードはありません。「カード作成」で作れます。</p>';
+  $("deck-list").innerHTML = h;
 }
+
+// カードをタップしたときの、えらぶ・外すの処理
+function toggleCard(id) {
+  const cards = loadCards();
+  const c = cards.find(x => x.id === id);
+  if (!c) return;
+  if (deckSel.includes(id)) {
+    deckSel = deckSel.filter(x => x !== id);
+    if (!isPower(c)) {   // 通常カードを外したら、そのパワーアップカードも外す
+      deckSel = deckSel.filter(x => { const p = cards.find(y => y.id === x); return !(p && isPower(p) && p.baseId === id); });
+    }
+    return;
+  }
+  if (isPower(c)) {
+    const base = cards.find(x => x.id === c.baseId && !isPower(x));
+    if (!base) return alert("このパワーアップカードの、元の通常カードがありません。");
+    if (countSel(true) >= MAX_POWER) return alert(`パワーアップカードは${MAX_POWER}枚までです。`);
+    if (!deckSel.includes(base.id)) {
+      if (countSel(false) >= DECK_CHAR) return alert("通常カードがもう10枚です。先にほかの通常カードを外してください。");
+      deckSel.push(base.id);   // 元の通常カードと合わせて1枚の扱い
+    }
+    deckSel.push(id);
+  } else {
+    if (countSel(false) >= DECK_CHAR) return alert("通常カードは10枚までです。");
+    deckSel.push(id);
+  }
+}
+
 $("deck-list").addEventListener("click", e => {
   const delId = e.target.dataset.del;
   if (delId) {
-    if (!confirm("このカードを削除しますか?(入っているデッキは10枚に足りなくなります)")) return;
+    if (!confirm("このカードを削除しますか?(入っているデッキから外れます)")) return;
     saveCards(loadCards().filter(c => c.id !== delId));
     const decks = loadDecks();
     decks.forEach(d => { d.ids = d.ids.filter(x => x !== delId); });
@@ -329,25 +504,29 @@ $("deck-list").addEventListener("click", e => {
   }
   const item = e.target.closest(".deck-item");
   if (!item) return;
-  const id = item.dataset.id;
-  if (deckSel.includes(id)) {
-    deckSel = deckSel.filter(x => x !== id);
-  } else {
-    if (deckSel.length >= DECK_CHAR) return alert("10枚までです。");
-    deckSel.push(id);
-  }
+  toggleCard(item.dataset.id);
   drawDeckList();
 });
+
+// サンプルカードを追加(通常カード10枚 + パワーアップ2枚)
 $("btn-sample").onclick = () => {
   const cards = loadCards();
-  SAMPLE_CARDS.forEach((s, i) => {
+  SAMPLE_CARDS.forEach(s => {
     if (cards.some(c => c.name === s.name)) return;
-    cards.push({ id: "s" + Date.now() + i, name: s.name, emoji: s.emoji, hp: s.hp, a1: s.a1, a2: s.a2 });
+    cards.push({ id: "sample:" + s.name, kind: "normal", name: s.name, emoji: s.emoji, hp: s.hp, a1: s.a1, a2: s.a2 });
+  });
+  SAMPLE_POWERS.forEach(s => {
+    if (cards.some(c => c.name === s.name)) return;
+    const base = cards.find(c => c.name === s.baseName && !isPower(c));
+    if (!base) return;
+    cards.push({ id: "sample:" + s.name, kind: "power", name: s.name, emoji: s.emoji, hp: s.hp,
+      baseId: base.id, upCost: s.upCost, a1: s.a1, a2: s.a2 });
   });
   if (saveCards(cards)) drawDeckList();
 };
 $("btn-save-deck").onclick = () => {
-  if (deckSel.length !== DECK_CHAR) return alert(`キャラクターカードを${DECK_CHAR}枚えらんでください(いま${deckSel.length}枚)`);
+  const n = countSel(false);
+  if (n !== DECK_CHAR) return alert(`通常カードを${DECK_CHAR}枚えらんでください(いま${n}枚)`);
   const decks = loadDecks();
   const d = decks.find(x => x.id === editId);
   const name = $("f-deckname").value.trim() || (d ? d.name : "デッキ" + (decks.length + 1));
@@ -360,7 +539,7 @@ $("btn-save-deck").onclick = () => {
 
 // ---------- ⑦ 対戦準備(自分とCPUのデッキをえらぶ) ----------
 function renderReady() {
-  const decks = loadDecks().filter(d => deckCards(d).length === DECK_CHAR);   // 10枚そろったデッキだけ
+  const decks = loadDecks().filter(deckValid);   // 通常カードが10枚そろったデッキだけ
   const sel = loadSel();
   const opt = d => `<option value="${d.id}">${esc(d.name)}</option>`;
   $("sel-player").innerHTML = decks.map(opt).join("");
@@ -368,8 +547,8 @@ function renderReady() {
   if (decks.some(d => d.id === sel.p)) $("sel-player").value = sel.p;
   if (sel.c === "auto" || decks.some(d => d.id === sel.c)) $("sel-cpu").value = sel.c;
   $("ready-msg").textContent = decks.length === 0
-    ? "10枚そろったデッキがありません。先に「デッキ編成」でデッキを作ってください。"
-    : "CPUには、自分で作ったデッキも使えます。";
+    ? "通常カード10枚そろったデッキがありません。先に「デッキ編成」でデッキを作ってください。"
+    : "CPUには、自分で作ったデッキも使えます。先攻・後攻は、バトル開始のコイントスで決まります。";
   $("btn-battle").disabled = decks.length === 0;
 }
 $("btn-battle").onclick = () => {
@@ -393,9 +572,16 @@ function infoEl(side) { return side === G.player ? $("p-info") : $("c-info"); }
 function addLog(text) { G.log.push(text); if (G.log.length > 50) G.log.shift(); }
 
 function makeChar(d) {
-  return { uid: ++uidCounter, type: "char", name: d.name, img: d.img || "", emoji: d.emoji || "",
-    maxHp: d.hp, hp: d.hp, a1: { ...d.a1 }, a2: { ...d.a2 },
-    canAct: false, acted: false, guard: false, amulet: false, plush: false };
+  let baseName = d.baseName || "";
+  if (d.baseId && !baseName) {
+    const b = loadCards().find(x => x.id === d.baseId);
+    baseName = b ? b.name : "";
+  }
+  return { uid: ++uidCounter, type: "char", srcId: d.id || ("n:" + d.name),
+    power: isPower(d), baseId: d.baseId || null, baseName: baseName, upCost: d.upCost || 0,
+    name: d.name, img: d.img || "", emoji: d.emoji || "",
+    maxHp: d.hp, hp: d.hp, a1: normSkill(d.a1), a2: normSkill(d.a2),
+    acted: false, fresh: false, guard: false, amulet: false, plush: false, decoy: 0, under: null };
 }
 function makeItem(def) {
   return { uid: ++uidCounter, type: "item", kind: def.kind, name: def.name, icon: def.icon, short: def.short, desc: def.desc };
@@ -404,11 +590,11 @@ function makeCost() {
   return { uid: ++uidCounter, type: "cost", name: "コスト", icon: "💎", short: "使うと💎+1", desc: "使うと💎を1つ獲得" };
 }
 
-// ランダムにアイテム10枚をえらぶ(「キャラ復活」は REVIVE_MAX 枚まで)
-function pickItems() {
+// ランダムにアイテムをえらぶ(「キャラ復活」は REVIVE_MAX 枚まで)
+function pickItems(count) {
   const list = [];
   let revive = 0;
-  while (list.length < ITEM_COUNT) {
+  while (list.length < count) {
     const def = ITEMS[Math.floor(Math.random() * ITEMS.length)];
     if (def.kind === "revive") {
       if (revive >= REVIVE_MAX) continue;
@@ -420,53 +606,82 @@ function pickItems() {
 }
 
 // 40枚のデッキを作って、最初の手札を配る
+// キャラ(通常+パワーアップ)の数に合わせて、アイテムとコストの数を調整する(アイテム:コスト = 約1:2)
 function buildSide(charDatas) {
   const deck = [];
   charDatas.forEach(d => deck.push(makeChar(d)));
-  pickItems().forEach(def => deck.push(makeItem(def)));
-  for (let i = 0; i < COST_COUNT; i++) deck.push(makeCost());
+  const rest = Math.max(0, DECK_TOTAL - charDatas.length);
+  const items = Math.round(rest / 3);
+  const costs = rest - items;
+  pickItems(items).forEach(def => deck.push(makeItem(def)));
+  for (let i = 0; i < costs; i++) deck.push(makeCost());
   shuffle(deck);
-  const side = { hp: START_HP, cost: 0, deck: deck, hand: [], field: [], down: [] };
-  // 5枚引く。キャラが1枚もなければ全部戻して引き直す
+  const side = { hp: START_HP, cost: 0, deck: deck, hand: [], field: [], down: [], turns: 0 };
+  // 5枚引く。場に出せるキャラ(パワーアップ以外)が1枚もなければ、全部戻して引き直す
   while (true) {
     side.hand = side.deck.splice(0, START_HAND);
-    if (side.hand.some(c => c.type === "char")) break;
+    if (side.hand.some(c => c.type === "char" && !c.power)) break;
     side.deck = shuffle(side.deck.concat(side.hand));
     side.hand = [];
   }
   return side;
 }
 
-function startBattle() {
+async function startBattle() {
   const sel = loadSel();
   const decks = loadDecks();
   const pd = decks.find(d => d.id === sel.p);
-  const pChars = pd ? deckCards(pd) : [];
-  if (pChars.length !== DECK_CHAR) {
-    alert("デッキをえらんでください(10枚そろったデッキが必要です)。");
+  const pChars = pd && deckValid(pd) ? deckCards(pd) : [];
+  if (pChars.length === 0) {
+    alert("デッキをえらんでください(通常カード10枚そろったデッキが必要です)。");
     show("ready");
     return;
   }
-  let cChars = CPU_CARDS;   // 「おまかせ」ならゲームのデッキ
+  let cChars = CPU_CARDS.concat(CPU_POWERS);   // 「おまかせ」ならゲームのデッキ
   if (sel.c && sel.c !== "auto") {
     const cd = decks.find(d => d.id === sel.c);
-    const cc = cd ? deckCards(cd) : [];
-    if (cc.length === DECK_CHAR) cChars = cc;
+    if (cd && deckValid(cd)) cChars = deckCards(cd);
   }
-  G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: false, over: false, log: [], acting: null };
+  G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: true, over: false, log: [], acting: null, first: "player" };
   T = null;
   show("battle");
-  addLog("バトル開始!");
-  startPlayerTurn();
+  render();
+  // コイントスで先攻・後攻を決める
+  G.first = await coinToss();
+  addLog(G.first === "player" ? "コイントス:あなたの先攻!" : "コイントス:CPUの先攻!");
+  if (G.first === "player") startPlayerTurn();
+  else await cpuTurn();
 }
 
-// ターンの最初にやること(ドロー → 💎獲得 → 防御・お守りの解除 → 行動可能に)
+// コイントス(表ならあなたが先攻、裏ならCPUが先攻)
+async function coinToss() {
+  const heads = Math.random() < 0.5;
+  const ov = $("coin-overlay"), coin = $("coin");
+  $("coin-text").textContent = "コイントス!(表ならあなたが先攻)";
+  coin.style.transition = "none";
+  coin.style.transform = "rotateY(0deg)";
+  ov.classList.remove("hidden");
+  void coin.offsetWidth;
+  coin.style.transition = "transform 2s cubic-bezier(.2,.7,.3,1)";
+  coin.style.transform = "rotateY(" + (heads ? 1800 : 1980) + "deg)";   // 1800度で表、1980度で裏が上になる
+  await sleep(2200);
+  $("coin-text").textContent = heads ? "表!  あなたの先攻です" : "裏!  CPUの先攻です";
+  await sleep(1700);
+  ov.classList.add("hidden");
+  return heads ? "player" : "cpu";
+}
+
+// ターンの最初にやること(ドロー → 💎獲得 → 防御・お守り・出したばかりの解除 → 行動できるように)
 function beginTurn(side) {
+  side.turns += 1;
   const card = side.deck.shift();       // デッキが空なら何も引かない
   if (card) side.hand.push(card);
   const gain = side.field.length;
   side.cost += gain;
-  side.field.forEach(c => { c.guard = false; c.amulet = false; c.canAct = true; c.acted = false; });
+  side.field.forEach(c => {
+    c.guard = false; c.amulet = false; c.acted = false; c.fresh = false;
+    if (c.decoy > 0) c.decoy -= 1;      // 身代わりは、自分のターンが来るたびに1つ減る
+  });
   addLog(`${who(side)}のターン(ドロー${card ? "1枚" : "なし"}、💎+${gain})`);
 }
 
@@ -484,18 +699,45 @@ function useCostCard(side, card) {
   addLog(`${who(side)}はコストカードで💎+1`);
 }
 
+// 場に出す(出したキャラはすぐ行動できる。ただし、そのターンはプレイヤーへの直接攻撃だけできない)
 function playChar(side, card) {
+  if (card.power) return false;               // パワーアップカードは、置き換えでしか場に出せない
   if (side.field.length >= FIELD_MAX) return false;
   side.hand = side.hand.filter(c => c !== card);
-  card.canAct = false;
   card.acted = false;
+  card.fresh = true;
   card.guard = false;
   side.field.push(card);
   addLog(`${who(side)}は${card.name}を場に出した`);
   return true;
 }
 
-// ダウンしたキャラを場からダウンゾーンへ送る(消える動きつき)
+// 相手の「身代わり」がいるときは、そのキャラしか攻撃対象にできない
+function targetsFor(foeSide) {
+  const decoys = foeSide.field.filter(c => c.decoy > 0);
+  return decoys.length > 0 ? decoys : foeSide.field.slice();
+}
+
+// キャラにダメージをあたえる。isAttack=true(キャラの技)ならお守りで0になる。
+// 防御中は半分。防御中でHPが2以上なら、HP0以下になっても1だけ残る
+function hitChar(t, dmg, isAttack) {
+  const r = { dmg: dmg, blocked: false, half: false, survived: false };
+  if (isAttack && t.amulet) { r.dmg = 0; r.blocked = true; return r; }
+  if (t.guard) { r.dmg = Math.ceil(dmg / 2); r.half = true; }
+  const before = t.hp;
+  t.hp -= r.dmg;
+  if (t.guard && before >= 2 && t.hp <= 0) { t.hp = 1; r.survived = true; }
+  return r;
+}
+function hitLog(t, r) {
+  if (r.blocked) return `${t.name}はお守りで0ダメージ!`;
+  let s = `${t.name}に${r.dmg}ダメージ`;
+  if (r.half) s += "(防御で半減)";
+  if (r.survived) s += " HP1でこらえた!";
+  return s;
+}
+
+// ダウンしたキャラを場からダウンゾーンへ送る(パワーアップ中なら、下の元カードも一緒に送る)
 async function sendDown(side, ch) {
   const el = cardEl(ch.uid);
   if (el) {
@@ -506,15 +748,44 @@ async function sendDown(side, ch) {
   side.field = side.field.filter(c => c !== ch);
   side.down.push(ch);
   addLog(`${ch.name}はダウンした!`);
+  if (ch.under) {
+    side.down.push(ch.under);
+    addLog(`${ch.under.name}も一緒にダウン`);
+    ch.under = null;
+  }
   render();
+}
+
+// アイテムが「いま使えない理由」を返す(使えるときは空の文字)
+function itemBlock(side, card) {
+  const foeSide = foe(side);
+  switch (card.kind) {
+    case "laser":
+      if (side.turns <= LASER_LOCK) return "最初のターンは使えません";
+      if (side.cost < LASER_COST) return `💎が${LASER_COST}つ必要です`;
+      return "";
+    case "bomb":
+      return foeSide.field.length > 0 ? "" : "相手の場にキャラがいないので使えません";
+    case "healChar": case "amulet": case "plush": case "decoy":
+      return side.field.length > 0 ? "" : "場にキャラがいないので使えません";
+    case "revive":
+      return side.down.some(c => c.type === "char") ? "" : "ダウンしたキャラがいないので使えません";
+    case "swap":
+      return side.field.some(c => !c.power) && side.hand.some(c => c.type === "char" && !c.power)
+        ? "" : "場と手札の両方に、パワーアップ以外のキャラが必要です";
+    default:
+      return "";
+  }
 }
 
 // アイテムを使う。target は対象のキャラ、target2 は「交代」で場に出す手札のキャラ
 async function useItem(side, card, target, target2) {
+  if (itemBlock(side, card)) return false;
   const foeSide = foe(side);
   const myInfo = infoEl(side), foeInfo = infoEl(foeSide);
   side.hand = side.hand.filter(c => c !== card);
   side.down.push(card);
+  if (card.kind === "laser") side.cost -= LASER_COST;
   addLog(`${who(side)}は「${card.name}」を使った!`);
   if (side === G.cpu) { render(); await wait(900); }   // CPUのときは、まず何を使ったか見せる
 
@@ -533,7 +804,8 @@ async function useItem(side, card, target, target2) {
   } else if (k === "revive") {
     side.down = side.down.filter(c => c !== target);
     target.hp = target.maxHp;
-    target.canAct = false; target.acted = false; target.guard = false; target.amulet = false; target.plush = false;
+    target.acted = false; target.fresh = false; target.guard = false; target.amulet = false; target.plush = false; target.decoy = 0;
+    target.under = null;
     side.hand.push(target);
     addLog(`${target.name}が手札に戻った`);
     render();
@@ -541,17 +813,21 @@ async function useItem(side, card, target, target2) {
     await sleep(900);
   } else if (k === "bomb") {
     const list = foeSide.field.slice();
-    list.forEach(t => { t.hp -= 30; });
+    const results = list.map(t => ({ t: t, r: hitChar(t, 30, false) }));   // 防御中は半分
+    results.forEach(x => addLog(hitLog(x.t, x.r)));
     render();
-    list.forEach(t => { fx(cardEl(t.uid), "bomb"); popDamage(t.uid, "-30"); });
+    results.forEach(x => {
+      fx(cardEl(x.t.uid), "bomb"); popDamage(x.t.uid, "-" + x.r.dmg);
+      if (x.r.survived) fx(cardEl(x.t.uid), "guard");
+    });
     await sleep(1000);
-    for (const t of list) if (t.hp <= 0) await sendDown(foeSide, t);
+    for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
   } else if (k === "laser") {
     foeSide.hp -= 30;
     render();
     fx(foeInfo, "laser"); popAt(foeInfo, "-30");
     await sleep(900);
-    if (foeSide.hp <= 0) finishGame(side === G.player);
+    if (foeSide.hp <= 0) { finishGame(side === G.player); return true; }
   } else if (k === "amulet") {
     target.amulet = true;
     addLog(`${target.name}は次の相手ターン、攻撃が0ダメージ`);
@@ -564,24 +840,31 @@ async function useItem(side, card, target, target2) {
     render();
     fx(cardEl(target.uid), "plush");
     await sleep(900);
+  } else if (k === "decoy") {
+    target.decoy = DECOY_TURNS;
+    addLog(`${target.name}が身代わりに!(${DECOY_TURNS}ターン)`);
+    render();
+    fx(cardEl(target.uid), "swap");
+    await sleep(900);
   } else if (k === "swap") {
     const idx = side.field.indexOf(target);
     side.field[idx] = target2;                         // 手札のキャラが同じ場所に入る
     side.hand = side.hand.filter(c => c !== target2);
     target.hp = Math.min(target.maxHp, target.hp + 50);
-    target.guard = false; target.amulet = false; target.plush = false; target.acted = false; target.canAct = false;
+    target.guard = false; target.amulet = false; target.plush = false; target.decoy = 0; target.acted = false; target.fresh = false;
     side.hand.push(target);                            // 場のキャラはHP+50で手札へ
-    target2.canAct = false; target2.acted = false; target2.guard = false;
+    target2.acted = false; target2.fresh = true; target2.guard = false;   // 入ったキャラはすぐ行動できる(直接攻撃だけ不可)
     addLog(`${target.name}と${target2.name}が交代(${target.name}はHP+50)`);
     render();
     fx(cardEl(target2.uid), "swap");
     await sleep(900);
   }
   render();
+  return true;
 }
 
 async function doGuard(side, ch) {
-  if (!ch.canAct || ch.acted) return false;
+  if (ch.acted) return false;
   if (side === G.cpu) { G.acting = ch.uid; render(); await wait(800); }
   ch.guard = true;
   ch.acted = true;
@@ -593,24 +876,58 @@ async function doGuard(side, ch) {
   return true;
 }
 
-// 攻撃。target が null のときは直接攻撃(相手の場が空のときだけ)
-async function doAttack(side, ch, n, target) {
-  const atk = n === 1 ? ch.a1 : ch.a2;
-  const mult = ch.plush ? 2 : 1;           // ぬいぐるみ中はコスト2倍・ダメージ2倍
-  const cost = atk.cost * mult;
-  const foeSide = foe(side);
-  if (!ch.canAct || ch.acted || side.cost < cost) return false;
-  if (target && !foeSide.field.includes(target)) return false;
-  if (!target && foeSide.field.length > 0) return false;
+// ----- キャラの技 -----
+const skillOf = (ch, n) => n === 1 ? ch.a1 : ch.a2;
+const isDmgSkill = sk => sk.type !== "heal";
+const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance";   // 相手1体をえらぶ技
 
-  side.cost -= cost;
+// 技が「いま使えない理由」を返す(使えるときは空の文字)
+function skillBlock(side, ch, n) {
+  const sk = skillOf(ch, n);
+  const mult = isDmgSkill(sk) && ch.plush ? 2 : 1;
+  const foeSide = foe(side);
+  if (ch.acted) return "行動ずみ";
+  if (side.cost < sk.cost * mult) return "コスト不足";
+  if (sk.type === "all" && foeSide.field.length === 0) return "相手の場にキャラがいない";
+  if (needsEnemy(sk) && foeSide.field.length === 0 && ch.fresh) return "出したばかりで直接攻撃できない";
+  return "";
+}
+
+// 技を使う。target: 攻撃は相手のキャラ(相手の場が空なら null=直接攻撃)、回復は味方のキャラ、全体攻撃は null
+async function doSkill(side, ch, n, target) {
+  const sk = skillOf(ch, n);
+  const foeSide = foe(side);
+  if (skillBlock(side, ch, n)) return false;
+  if (sk.type === "heal") {
+    if (!target || !side.field.includes(target)) return false;
+  } else if (needsEnemy(sk)) {
+    if (target) { if (!targetsFor(foeSide).includes(target)) return false; }
+    else if (foeSide.field.length > 0) return false;
+  }
+
+  const dmgSkill = isDmgSkill(sk);
+  const mult = dmgSkill && ch.plush ? 2 : 1;      // ぬいぐるみ中は、コスト2倍・ダメージ2倍
+  side.cost -= sk.cost * mult;
   ch.acted = true;
-  ch.plush = false;                        // ぬいぐるみの効果は1回の攻撃で終わり
-  let dmg = atk.dmg * mult;
-  addLog(`${who(side)}の${ch.name}「${atk.name}」${mult === 2 ? "🧸" : ""}`);
+  if (dmgSkill) ch.plush = false;                  // ぬいぐるみの効果は1回の攻撃で終わり
+  addLog(`${who(side)}の${ch.name}「${sk.name}」${mult === 2 ? "🧸" : ""}`);
   G.acting = ch.uid;
   render();
-  if (side === G.cpu) await wait(800);     // CPUのときは、誰が動くか見せる
+  if (side === G.cpu) await wait(800);             // CPUのときは、誰が動くか見せる
+
+  // 回復
+  if (sk.type === "heal") {
+    G.acting = null;
+    const before = target.hp;
+    target.hp = Math.min(target.maxHp, target.hp + sk.heal);
+    const got = target.hp - before;
+    addLog(`${target.name}のHPが${got}回復`);
+    render();
+    fx(cardEl(target.uid), "heal"); popDamage(target.uid, "+" + got, "heal");
+    await sleep(900);
+    render();
+    return true;
+  }
 
   // 前に飛び出す動き
   const atkEl = cardEl(ch.uid);
@@ -620,17 +937,36 @@ async function doAttack(side, ch, n, target) {
   }
   G.acting = null;
 
-  if (target) {
-    const blocked = target.amulet;
-    if (blocked) dmg = 0;
-    else if (target.guard) dmg = Math.ceil(dmg / 2);
-    target.hp -= dmg;
-    addLog(blocked ? `${target.name}はお守りで0ダメージ!`
-      : `${target.name}に${dmg}ダメージ${target.guard ? "(防御で半減)" : ""}`);
+  // 確率攻撃は、まず当たるかどうか
+  if (sk.type === "chance" && !(Math.random() * 100 < sk.pct)) {
+    addLog(`はずれた…(成功${sk.pct}%)`);
+    render();
+    popAt(target ? cardEl(target.uid) : infoEl(foeSide), "MISS", "zero");
+    await sleep(900);
+    render();
+    return true;
+  }
+
+  const dmg = sk.dmg * mult;
+  if (sk.type === "all") {
+    const list = foeSide.field.slice();
+    const results = list.map(t => ({ t: t, r: hitChar(t, dmg, true) }));
+    results.forEach(x => addLog(hitLog(x.t, x.r)));
+    render();
+    results.forEach(x => {
+      const el = cardEl(x.t.uid);
+      if (x.r.blocked) { fx(el, "guard"); popAt(el, "0", "zero"); }
+      else { fx(el, "slash"); popAt(el, "-" + x.r.dmg); if (x.r.survived) fx(el, "guard"); }
+    });
+    await sleep(1000);
+    for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
+  } else if (target) {
+    const r = hitChar(target, dmg, true);
+    addLog(hitLog(target, r));
     render();
     const tel = cardEl(target.uid);
-    if (blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
-    else { fx(tel, "slash"); popAt(tel, "-" + dmg); }
+    if (r.blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
+    else { fx(tel, "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
     await sleep(900);
     if (target.hp <= 0) await sendDown(foeSide, target);
   } else {
@@ -639,8 +975,64 @@ async function doAttack(side, ch, n, target) {
     render();
     fx(infoEl(foeSide), "slash"); popAt(infoEl(foeSide), "-" + dmg);
     await sleep(900);
-    if (foeSide.hp <= 0) finishGame(side === G.player);
+    if (foeSide.hp <= 0) { finishGame(side === G.player); return true; }
   }
+
+  // 捨て身は、自分もダメージを受ける
+  if (sk.type === "sacrifice" && !G.over) {
+    ch.hp -= sk.self;
+    addLog(`${ch.name}も${sk.self}ダメージを受けた`);
+    render();
+    fx(cardEl(ch.uid), "slash"); popDamage(ch.uid, "-" + sk.self);
+    await sleep(900);
+    if (ch.hp <= 0) await sendDown(side, ch);
+  }
+  render();
+  return true;
+}
+
+// ----- パワーアップ(通常カードを、手札のパワーアップカードに置き換える) -----
+function powerBase(side, pcard) {
+  return side.field.find(c => !c.power && c.srcId === pcard.baseId);
+}
+function powerBlock(side, pcard) {
+  if (!pcard.power) return "パワーアップカードではありません";
+  if (!powerBase(side, pcard)) return `元の「${pcard.baseName}」が場にいません`;
+  if (side.cost < pcard.upCost) return "コスト不足";
+  return "";
+}
+async function doPowerUp(side, pcard) {
+  if (powerBlock(side, pcard)) return false;
+  const base = powerBase(side, pcard);
+  side.cost -= pcard.upCost;
+  addLog(`${who(side)}の${base.name}がパワーアップ!`);
+  G.acting = base.uid;
+  render();
+  if (side === G.cpu) await wait(800);
+
+  // 力をためる(ビビビと細かくふるえる)
+  const bel = cardEl(base.uid);
+  if (bel) { bel.classList.add("charging"); fx(bel, "charge"); await sleep(900); }
+
+  // 置き換え。受けていたダメージは引きつぐ(HPは最低1)
+  const taken = base.maxHp - base.hp;
+  const idx = side.field.indexOf(base);
+  side.hand = side.hand.filter(c => c !== pcard);
+  pcard.under = base;
+  pcard.hp = Math.max(1, pcard.maxHp - taken);
+  pcard.acted = base.acted; pcard.fresh = base.fresh; pcard.guard = base.guard;
+  pcard.amulet = base.amulet; pcard.plush = base.plush; pcard.decoy = base.decoy;
+  pcard.shownPct = base.shownPct;
+  base.guard = false; base.amulet = false; base.plush = false; base.decoy = 0;
+  side.field[idx] = pcard;
+  G.acting = null;
+  addLog(`${pcard.name}にパワーアップした!`);
+  render();
+  const nel = cardEl(pcard.uid);
+  if (nel) nel.classList.add("powerup-in");
+  fx(nel || infoEl(side), "power");
+  goldFlash();
+  await sleep(1800);
   render();
   return true;
 }
@@ -658,7 +1050,7 @@ function finishGame(playerWon) {
 }
 
 // ---------- ⑨ エフェクト(キラキラ・ダメージ数字) ----------
-// e: とび散る絵文字  n: 数  rise: 上にのぼる  line: 斬撃  ring: 広がる輪(色)  beam: ビーム
+// e: とび散る絵文字  n: 数  rise: 上にのぼる  line: 斬撃  ring: 広がる輪(色)  beam: ビーム  gold: 金色の演出
 const FX = {
   slash:  { e: ["✨", "⭐", "💥", "✦"], n: 10, line: true },
   guard:  { e: ["✨", "🔴", "✦", "🛡️"], n: 10, ring: "#ff4d4d" },
@@ -671,6 +1063,8 @@ const FX = {
   enter:  { e: ["✨", "⭐", "✦"], n: 8, ring: "#ffd86b" },
   gem:    { e: ["💎", "✨"], n: 7, rise: true },
   down:   { e: ["💨", "✨"], n: 6, rise: true },
+  charge: { e: ["✨", "⭐", "✦"], n: 10, ring: "#ffd700" },
+  power:  { e: ["✨", "⭐", "🌟", "💫", "✦", "✧"], n: 30, ring: "#ffd700", gold: true },
 };
 
 function cardEl(uid) {
@@ -686,20 +1080,25 @@ function fx(el, kind) {
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     for (let i = 0; i < set.n; i++) {
       const s = document.createElement("span");
-      s.className = "spark";
+      s.className = "spark" + (set.gold ? " gold" : "");
       s.textContent = set.e[i % set.e.length];
-      const ang = Math.random() * Math.PI * 2, dist = 28 + Math.random() * 55;
+      const ang = Math.random() * Math.PI * 2, dist = (set.gold ? 45 : 28) + Math.random() * (set.gold ? 110 : 55);
       s.style.left = cx + "px";
       s.style.top = cy + "px";
       s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
       s.style.setProperty("--dy", Math.sin(ang) * dist - (set.rise ? 45 : 0) + "px");
-      s.style.animationDelay = Math.random() * 0.15 + "s";
+      s.style.animationDelay = Math.random() * (set.gold ? 0.5 : 0.15) + "s";
       document.body.appendChild(s);
-      setTimeout(() => s.remove(), 1200);
+      setTimeout(() => s.remove(), 1800);
     }
     if (set.line) addFxEl("slash", cx, cy);
     if (set.ring) addFxEl("ring", cx, cy, set.ring);
     if (set.beam) addFxEl("beam", cx, cy);
+    if (set.gold) {                               // 金色の演出:光の柱と、時間差で広がる輪
+      addFxEl("pillar", cx, cy);
+      setTimeout(() => addFxEl("ring", cx, cy, "#fff3a0"), 180);
+      setTimeout(() => addFxEl("ring", cx, cy, "#ffb800"), 360);
+    }
   } catch (e) { /* エフェクトが出なくてもゲームは続ける */ }
 }
 function addFxEl(cls, x, y, color) {
@@ -709,7 +1108,16 @@ function addFxEl(cls, x, y, color) {
   d.style.top = y + "px";
   if (color) d.style.setProperty("--c", color);
   document.body.appendChild(d);
-  setTimeout(() => d.remove(), 1000);
+  setTimeout(() => d.remove(), 1400);
+}
+// 画面全体が金色にピカッと光る
+function goldFlash() {
+  try {
+    const f = document.createElement("div");
+    f.className = "goldflash";
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1100);
+  } catch (e) { /* なくてもよい */ }
 }
 
 // ダメージ・回復の数字を出す(cls なし=ダメージ)
@@ -736,6 +1144,7 @@ function animateBars() {
 // ---------- ⑩ CPU(ルールで動く簡単なAI) ----------
 async function cpuTurn() {
   G.turn = "cpu";
+  G.busy = true;
   beginTurn(G.cpu);
   render();
   await wait(1200);
@@ -743,6 +1152,49 @@ async function cpuTurn() {
   if (G.over) return;
   await wait(800);
   startPlayerTurn();
+}
+
+// 防御・お守りを考えた、実際に入るダメージ
+function effDmg(t, d, isAttack) {
+  if (isAttack && t.amulet) return 0;
+  return t.guard ? Math.ceil(d / 2) : d;
+}
+
+// そのキャラが使う技と対象をえらぶ(使うと良い技がなければ null)
+function aiAction(side, ch) {
+  const foeSide = foe(side);
+  let best = null;
+  [1, 2].forEach(n => {
+    const sk = skillOf(ch, n);
+    if (skillBlock(side, ch, n)) return;
+    const mult = isDmgSkill(sk) && ch.plush ? 2 : 1;
+    let score = 0, target = null;
+    if (sk.type === "heal") {
+      const t = side.field.filter(c => c.maxHp - c.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (!t || t.hp / t.maxHp > 0.6) return;               // あまりダメージを受けていなければ使わない
+      score = Math.min(sk.heal, t.maxHp - t.hp) * 0.8;
+      target = t;
+    } else if (sk.type === "all") {
+      score = foeSide.field.reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
+    } else {
+      if (sk.type === "sacrifice" && sk.self >= ch.hp) return;   // 自分がダウンしてしまう捨て身はしない
+      const dmg = sk.dmg * mult;
+      if (foeSide.field.length > 0) {
+        const pool = targetsFor(foeSide);
+        const noAmulet = pool.filter(t => !t.amulet);          // お守り中は0ダメージなので、さける
+        const ts = noAmulet.length > 0 ? noAmulet : pool;
+        const kill = ts.filter(t => effDmg(t, dmg, true) >= t.hp).sort((a, b) => b.hp - a.hp);
+        target = kill.length > 0 ? kill[0] : ts.slice().sort((a, b) => a.hp - b.hp)[0];
+        score = target.amulet ? 0 : Math.min(target.hp, effDmg(target, dmg, true)) + (kill.length > 0 ? 15 : 0);
+      } else {
+        score = dmg * 1.2;                                       // 直接攻撃
+      }
+      if (sk.type === "chance") score *= sk.pct / 100;
+      if (sk.type === "sacrifice") score -= sk.self * 0.7;
+    }
+    if (score > 0 && (!best || score > best.score)) best = { n: n, target: target, score: score };
+  });
+  return best;
 }
 
 async function aiPlay(side) {
@@ -757,9 +1209,10 @@ async function aiPlay(side) {
     await wait(650);
   }
 
-  // 2. アイテムカードを、使うと良いときに使う
+  // 2. アイテムカードを、使うと良いときに使う(ぬいぐるみは攻撃の直前に使う)
   for (const card of side.hand.filter(c => c.type === "item" && c.kind !== "plush")) {
     if (G.over) return;
+    if (itemBlock(side, card)) continue;
     const k = card.kind;
     if (k === "healPlayer") {
       if (side.hp <= 50) await useItem(side, card);
@@ -767,18 +1220,21 @@ async function aiPlay(side) {
       const t = side.field.filter(c => c.maxHp - c.hp >= 30).sort((a, b) => a.hp - b.hp)[0];
       if (t) await useItem(side, card, t);
     } else if (k === "revive") {
-      const t = side.down.find(c => c.type === "char");
+      const t = side.down.filter(c => c.type === "char").sort((a, b) => b.maxHp - a.maxHp)[0];
       if (t) await useItem(side, card, t);
     } else if (k === "bomb") {
       if (foeSide.field.length >= 2 || foeSide.field.some(c => c.hp <= 30)) await useItem(side, card);
     } else if (k === "laser") {
-      await useItem(side, card);
+      if (foeSide.hp <= 30 || side.cost >= LASER_COST + 3) await useItem(side, card);
     } else if (k === "amulet") {
-      const t = side.field.filter(c => !c.amulet).sort((a, b) => b.a2.dmg - a.a2.dmg)[0];
+      const t = side.field.filter(c => !c.amulet).sort((a, b) => b.hp - a.hp)[0];
       if (t && foeSide.field.length > 0) await useItem(side, card, t);
+    } else if (k === "decoy") {
+      const t = side.field.slice().sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
+      if (t && side.field.length >= 2 && foeSide.field.length > 0 && !side.field.some(c => c.decoy > 0)) await useItem(side, card, t);
     } else if (k === "swap") {
-      const f = side.field.filter(c => c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
-      const h = side.hand.filter(c => c.type === "char").sort((a, b) => b.maxHp - a.maxHp)[0];
+      const f = side.field.filter(c => !c.power && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
+      const h = side.hand.filter(c => c.type === "char" && !c.power).sort((a, b) => b.maxHp - a.maxHp)[0];
       if (f && h) await useItem(side, card, f, h);
     }
     if (G.over) return;
@@ -787,7 +1243,7 @@ async function aiPlay(side) {
 
   // 3. キャラクターを場に出す(HPの高い順)
   while (side.field.length < FIELD_MAX) {
-    const chars = side.hand.filter(c => c.type === "char").sort((a, b) => b.maxHp - a.maxHp);
+    const chars = side.hand.filter(c => c.type === "char" && !c.power).sort((a, b) => b.maxHp - a.maxHp);
     if (chars.length === 0) break;
     playChar(side, chars[0]);
     G.acting = chars[0].uid;
@@ -797,37 +1253,28 @@ async function aiPlay(side) {
     G.acting = null;
   }
 
-  // 4. ぬいぐるみ(2倍の💎を払える行動可能なキャラがいるときだけ)
+  // 4. パワーアップできるなら置き換える
+  for (const pc of side.hand.filter(c => c.type === "char" && c.power)) {
+    if (G.over) return;
+    if (!powerBlock(side, pc)) { await doPowerUp(side, pc); await wait(500); }
+  }
+
+  // 5. ぬいぐるみ(2倍の💎を払える、まだ動いていないキャラがいるときだけ)
   for (const card of side.hand.filter(c => c.type === "item" && c.kind === "plush")) {
     if (G.over) return;
     const t = side.field
-      .filter(c => c.canAct && !c.acted && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
-      .sort((a, b) => b.a2.dmg - a.a2.dmg)[0];
+      .filter(c => !c.acted && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
+      .sort((a, b) => b.hp - a.hp)[0];
     if (t) { await useItem(side, card, t); await wait(500); }
   }
 
-  // 5. 行動できるキャラで攻撃(できなければ防御)
+  // 6. 行動できるキャラで技を使う(使える技がなければ防御)
   for (const ch of side.field.slice()) {
     if (G.over) return;
-    if (!ch.canAct || ch.acted) continue;
-
-    const mult = ch.plush ? 2 : 1;
-    const options = [{ n: 1, a: ch.a1 }, { n: 2, a: ch.a2 }]
-      .filter(o => o.a.cost * mult <= side.cost)
-      .sort((x, y) => y.a.dmg - x.a.dmg);
-    if (options.length === 0) { await doGuard(side, ch); await wait(600); continue; }
-
-    const atk = options[0];
-    let target = null;
-    if (foeSide.field.length > 0) {
-      // お守り中の相手は0ダメージなので、他にいればさける
-      const noAmulet = foeSide.field.filter(t => !t.amulet);
-      const ts = noAmulet.length > 0 ? noAmulet : foeSide.field;
-      const eff = t => (t.guard ? Math.ceil(atk.a.dmg * mult / 2) : atk.a.dmg * mult);
-      const kill = ts.filter(t => eff(t) >= t.hp).sort((a, b) => b.hp - a.hp);
-      target = kill.length > 0 ? kill[0] : ts.slice().sort((a, b) => a.hp - b.hp)[0];
-    }
-    await doAttack(side, ch, atk.n, target);
+    if (ch.acted) continue;
+    const act = aiAction(side, ch);
+    if (!act) { await doGuard(side, ch); await wait(600); continue; }
+    await doSkill(side, ch, act.n, act.target);
     if (G.over) return;
     await wait(700);
   }
@@ -869,11 +1316,14 @@ function render() {
 
 // ----- メニュー -----
 function closeMenu() { $("menu").classList.remove("open"); }
+// opt: card(大きく見せるカード) title msg note buttons noClose
 function openMenu(opt) {
   const panel = $("menu-panel");
+  panel.onclick = null;
   let h = "";
   if (opt.card) h += bigCardHTML(opt.card);
   if (opt.title) h += `<h3>${esc(opt.title)}</h3>`;
+  if (opt.msg) h += `<p class="msg">${esc(opt.msg)}</p>`;
   if (opt.note) h += `<p class="note">${esc(opt.note)}</p>`;
   panel.innerHTML = h;
   (opt.buttons || []).forEach(b => {
@@ -884,14 +1334,35 @@ function openMenu(opt) {
     btn.onclick = () => { closeMenu(); if (b.action) b.action(); };
     panel.appendChild(btn);
   });
+  if (!opt.noClose) {
+    const close = document.createElement("button");
+    close.className = "btn small ghost";
+    close.textContent = "閉じる";
+    close.onclick = closeMenu;
+    panel.appendChild(close);
+  }
+  $("menu").classList.add("open");
+}
+$("menu").addEventListener("click", e => { if (e.target.id === "menu") closeMenu(); });
+
+// カードを並べて見せて、タップでえらばせる(キャラ復活など)
+function openPicker(title, list, onPick) {
+  const panel = $("menu-panel");
+  panel.innerHTML = `<h3>${esc(title)}</h3><p class="note">カードをタップしてえらびます</p><div class="pick-grid">` +
+    list.map(c => `<div class="pick" data-uid="${c.uid}">${bigCardHTML(Object.assign({}, c, { hp: c.maxHp }), true)}</div>`).join("") + "</div>";
+  panel.onclick = e => {
+    const el = e.target.closest(".pick");
+    if (!el) return;
+    const c = list.find(x => x.uid === Number(el.dataset.uid));
+    if (c) { closeMenu(); onPick(c); }
+  };
   const close = document.createElement("button");
   close.className = "btn small ghost";
-  close.textContent = "閉じる";
+  close.textContent = "やめる";
   close.onclick = closeMenu;
   panel.appendChild(close);
   $("menu").classList.add("open");
 }
-$("menu").addEventListener("click", e => { if (e.target.id === "menu") closeMenu(); });
 
 // ----- カードをタップして対象をえらぶ -----
 // list の中のカードが光る。タップされたら onPick(そのカード) が呼ばれる
@@ -921,9 +1392,13 @@ function handMenu(card) {
   if (card.type === "cost") {
     openMenu({ card, buttons: [{ label: "使う(💎+1)",
       action: () => run(async () => { useCostCard(p, card); render(); gemFx(p); await sleep(400); }) }] });
+  } else if (card.type === "char" && card.power) {
+    const why = powerBlock(p, card);
+    openMenu({ card, note: why || `場の「${card.baseName}」を、このカードに置き換えます(💎${card.upCost})`,
+      buttons: [{ label: `パワーアップ(💎${card.upCost})`, disabled: !!why, action: () => run(() => doPowerUp(p, card)) }] });
   } else if (card.type === "char") {
     const full = p.field.length >= FIELD_MAX;
-    openMenu({ card, note: full ? "場がいっぱいです(最大3枚)" : "出したターンは行動できません",
+    openMenu({ card, note: full ? "場がいっぱいです(最大3枚)" : "出したキャラはすぐ行動できます(出したターンは直接攻撃だけできません)",
       buttons: [{ label: "場に出す", disabled: full,
         action: () => run(async () => { playChar(p, card); render(); fx(cardEl(card.uid), "enter"); await sleep(500); }) }] });
   } else {
@@ -934,61 +1409,83 @@ function handMenu(card) {
 function itemMenu(card) {
   const p = G.player;
   const k = card.kind;
-  const use = (label, disabled, action, note) =>
-    openMenu({ card, note: note || "", buttons: [{ label: label, disabled: disabled, action: action }] });
+  const why = itemBlock(p, card);
+  const use = (label, action) =>
+    openMenu({ card, note: why, buttons: [{ label: label, disabled: !!why, action: action }] });
 
-  if (k === "healPlayer" || k === "laser") {
-    use("使う", false, () => run(() => useItem(p, card)));
+  if (k === "healPlayer") {
+    use("使う", () => run(() => useItem(p, card)));
+  } else if (k === "laser") {
+    use(`使う(💎${LASER_COST})`, () => run(() => useItem(p, card)));
   } else if (k === "bomb") {
-    const none = G.cpu.field.length === 0;
-    use("使う", none, () => run(() => useItem(p, card)), none ? "相手の場にキャラがいないので使えません" : "");
-  } else if (k === "healChar" || k === "amulet" || k === "plush") {
-    const none = p.field.length === 0;
+    use("使う", () => run(() => useItem(p, card)));
+  } else if (k === "healChar" || k === "amulet" || k === "plush" || k === "decoy") {
     const prompt = k === "healChar" ? "回復するキャラをタップ"
-      : k === "amulet" ? "お守りをつけるキャラをタップ" : "ぬいぐるみをわたすキャラをタップ";
-    use("使う(対象をえらぶ)", none,
-      () => startTarget(prompt, p.field, ch => run(() => useItem(p, card, ch))),
-      none ? "場にキャラがいないので使えません" : "");
+      : k === "amulet" ? "お守りをつけるキャラをタップ"
+      : k === "plush" ? "ぬいぐるみをわたすキャラをタップ" : "身代わりにするキャラをタップ";
+    use("使う(対象をえらぶ)", () => startTarget(prompt, p.field, ch => run(() => useItem(p, card, ch))));
   } else if (k === "revive") {
-    const list = p.down.filter(c => c.type === "char");
-    if (list.length === 0) return openMenu({ card, note: "ダウンしたキャラがいないので使えません" });
-    openMenu({ card, title: "手札に戻すキャラをえらぶ",
-      buttons: list.map(ch => ({ label: ch.name, action: () => run(() => useItem(p, card, ch)) })) });
+    use("使う(復活させるキャラをえらぶ)", () => {
+      const list = p.down.filter(c => c.type === "char");
+      openPicker("復活させるキャラをえらぶ(HPは全回復)", list, ch => run(() => useItem(p, card, ch)));
+    });
   } else if (k === "swap") {
-    const hands = p.hand.filter(c => c.type === "char");
-    const none = p.field.length === 0 || hands.length === 0;
-    use("使う(対象をえらぶ)", none,
-      () => startTarget("手札に戻す(場の)キャラをタップ", p.field,
+    use("使う(対象をえらぶ)", () => {
+      const fields = p.field.filter(c => !c.power);
+      const hands = p.hand.filter(c => c.type === "char" && !c.power);
+      startTarget("手札に戻す(場の)キャラをタップ", fields,
         f => startTarget("場に出す(手札の)キャラをタップ", hands,
-          h => run(() => useItem(p, card, f, h)))),
-      none ? "場と手札の両方にキャラが必要です" : "");
+          h => run(() => useItem(p, card, f, h))));
+    });
   }
 }
 
 // ----- 自分の場のキャラをタップ -----
+function skillBtnLabel(sk, n, m) {
+  const mm = sk.type === "heal" ? 1 : m;
+  const c = sk.cost * mm;
+  const body = {
+    attack: `💎${c} 💥${sk.dmg * mm}`,
+    heal: `💎${c} 💚+${sk.heal}`,
+    all: `💎${c} 全体💥${sk.dmg * mm}`,
+    sacrifice: `💎${c} 💥${sk.dmg * mm} 自分-${sk.self}`,
+    chance: `💎${c} 💥${sk.dmg * mm} ${sk.pct}%`,
+  }[sk.type];
+  return `${n === 1 ? "①" : "②"} ${sk.name}(${body})`;
+}
+
 function fieldMenu(ch) {
   const p = G.player;
-  const can = ch.canAct && !ch.acted;
   const m = ch.plush ? 2 : 1;
-  const note = !ch.canAct ? "出したばかりなので、次のターンから行動できます"
-    : ch.acted ? "このターンはもう行動しました"
-    : ch.plush ? "🧸次の攻撃は、💎も2倍・ダメージも2倍" : "";
-  const label = (n, a) => `攻撃${n} ${a.name}(💎${a.cost * m} 💥${a.dmg * m})${p.cost < a.cost * m ? " コスト不足" : ""}`;
+  let note = ch.acted ? "このターンはもう行動しました" : "";
+  if (!ch.acted && ch.plush) note = "🧸次の攻撃は、💎も2倍・ダメージも2倍";
+  if (!ch.acted && ch.fresh) note += (note ? " / " : "") + "出したばかりなので、直接攻撃はできません";
+  const btn = n => {
+    const sk = skillOf(ch, n);
+    const why = skillBlock(p, ch, n);
+    return { label: skillBtnLabel(sk, n, m) + (why && !ch.acted ? " ※" + why : ""), disabled: !!why,
+      action: () => chooseSkillTarget(ch, n) };
+  };
   openMenu({ card: ch, note, buttons: [
-    { label: label("①", ch.a1), disabled: !can || p.cost < ch.a1.cost * m, action: () => chooseTarget(ch, 1) },
-    { label: label("②", ch.a2), disabled: !can || p.cost < ch.a2.cost * m, action: () => chooseTarget(ch, 2) },
-    { label: "防御(次の相手ターン、ダメージ半分)", disabled: !can, action: () => run(() => doGuard(p, ch)) },
+    btn(1), btn(2),
+    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted, action: () => run(() => doGuard(p, ch)) },
   ] });
 }
-function chooseTarget(ch, n) {
+
+// 技の対象をえらぶ(相手や味方のカードが光るので、タップする)
+function chooseSkillTarget(ch, n) {
   const p = G.player;
-  const ts = G.cpu.field;
-  if (ts.length === 0) {
-    run(() => doAttack(p, ch, n, null));   // 相手の場が空なら直接攻撃
+  const sk = skillOf(ch, n);
+  const foeSide = G.cpu;
+  if (sk.type === "all") { run(() => doSkill(p, ch, n, null)); return; }
+  if (sk.type === "heal") {
+    startTarget("回復するキャラをタップ", p.field, t => run(() => doSkill(p, ch, n, t)));
     return;
   }
-  // 相手の場のカードが光るので、攻撃したい相手をタップする
-  startTarget("攻撃する相手をタップ", ts, t => run(() => doAttack(p, ch, n, t)));
+  if (foeSide.field.length === 0) { run(() => doSkill(p, ch, n, null)); return; }   // 相手の場が空なら直接攻撃
+  const ts = targetsFor(foeSide);
+  const prompt = ts.length < foeSide.field.length ? "身代わりのキャラをタップ(ほかは狙えません)" : "攻撃する相手をタップ";
+  startTarget(prompt, ts, t => run(() => doSkill(p, ch, n, t)));
 }
 
 // カードのタップをまとめて受け取る
@@ -1024,12 +1521,24 @@ $("screen-battle").addEventListener("click", e => {
   }
 });
 
-$("btn-end").onclick = () => {
+function endTurn() {
   if (!G || G.busy || G.over || G.turn !== "player" || T) return;
   G.busy = true;
   addLog("あなたはターンを終了した");
   render();
   setTimeout(cpuTurn, 600 * SPEED);
+}
+$("btn-end").onclick = () => {
+  if (!G || G.busy || G.over || G.turn !== "player" || T) return;
+  // まだ何も行動していないキャラがいたら、確認する
+  const idle = G.player.field.filter(c => !c.acted);
+  if (idle.length > 0) {
+    openMenu({ title: "確認", noClose: true,
+      msg: `${idle.map(c => c.name).join("、")}の行動指示がありませんがよろしいですか?`,
+      buttons: [{ label: "はい", action: endTurn }, { label: "いいえ" }] });
+    return;
+  }
+  endTurn();
 };
 $("btn-quit").onclick = () => {
   if (G && G.busy) return alert("CPUのターンが終わってからやめてください。");

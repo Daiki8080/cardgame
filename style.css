@@ -152,12 +152,14 @@ input[type=file] { color: #fff; }
 
 /* ===== デッキ編成 ===== */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 14px; justify-items: center; margin-bottom: 12px; }
-.deck-item { position: relative; }
+.deck-item { text-align: center; }
+.deck-item .cap { font-size: 10px; color: #ffd86b; margin-top: 3px; max-width: var(--cw); line-height: 1.2; }
 .deck-item .del {
-  position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+  display: block; margin: 4px auto 0;
   background: #c0392b; color: #fff; border: none; border-radius: 10px;
   font-size: 11px; padding: 2px 8px;
 }
+#deck-list h3 { margin: 16px 0 6px; }
 .deck-row { display: flex; align-items: center; gap: 8px; background: #2a2f55; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
 .deck-row .dname { flex: 1; font-weight: bold; min-width: 0; }
 .deck-row small { display: block; color: #b8bfe8; font-weight: normal; }
@@ -190,6 +192,7 @@ input[type=file] { color: #fff; }
 }
 .pop.heal { color: #1fae55; }
 .pop.zero { color: #3a7bd5; }
+.pop.endure { color: #ffb400; font-size: 18px; white-space: nowrap; }
 @keyframes floatup { to { transform: translate(-50%, -30px); opacity: 0; } }
 
 /* ===== メニュー ===== */
@@ -204,3 +207,92 @@ input[type=file] { color: #fff; }
 .big .bname { font-size: 20px; font-weight: bold; margin-top: 6px; }
 .big .bar { margin: 6px 0; }
 .big .batk { font-size: 13px; margin-top: 4px; }
+
+/* ===== コイントス ===== */
+#coin-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(10, 12, 30, .9); display: flex; align-items: center; justify-content: center; }
+.coin-box { text-align: center; }
+#coin-title { font-size: 28px; font-weight: bold; color: #ffd86b; margin-bottom: 40px; }
+.coin-wrap { width: 130px; height: 130px; margin: 0 auto; perspective: 700px; }
+.coin-wrap.toss { animation: toss 1.9s ease-out; }
+@keyframes toss { 0% { transform: translateY(0); } 35% { transform: translateY(-110px); } 70% { transform: translateY(0); } 82% { transform: translateY(-16px); } 100% { transform: translateY(0); } }
+#coin { position: relative; width: 130px; height: 130px; transform-style: preserve-3d; }
+#coin .face {
+  position: absolute; inset: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: bold; color: #7a5200;
+  border: 6px solid #f4c430; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #f2c230 60%, #c98f00);
+  box-shadow: inset 0 0 18px #b8860b, 0 0 26px #ffd86b;
+}
+#coin .face.back { transform: rotateY(180deg); }
+#coin-result { margin-top: 44px; min-height: 40px; font-size: 28px; font-weight: bold; }
+
+/* ===== パワーアップ・身代わり ===== */
+.power-box { background: #3a3220; border: 2px solid #ffc400; border-radius: 10px; padding: 4px 12px 10px; margin-top: 10px; }
+.card.power { border-color: #ffc400; background: linear-gradient(135deg, #fff7d1, #ffe39a); box-shadow: 0 0 8px 1px #ffd24a; }
+.card.decoy { border-color: #9b59ff; box-shadow: 0 0 10px 2px #9b59ff; }
+.card.guard.power { box-shadow: 0 0 10px 3px #ff3030; }
+
+/* パワーアップの演出:力をためてビビビ → 金色にピカッ */
+.card.charging { z-index: 6; animation: buzz .07s linear infinite; filter: drop-shadow(0 0 8px #ffd700) brightness(1.3); }
+@keyframes buzz {
+  0%   { transform: translate(-2px, 1px) scale(1.08); }
+  25%  { transform: translate(2px, -1px) scale(1.08); }
+  50%  { transform: translate(-1px, -2px) scale(1.08); }
+  75%  { transform: translate(1px, 2px) scale(1.08); }
+  100% { transform: translate(-2px, 1px) scale(1.08); }
+}
+.card.powerup-in { z-index: 6; animation: powerIn 1.6s ease-out; }
+@keyframes powerIn {
+  0%   { transform: scale(.3) rotate(-10deg); filter: brightness(5); }
+  18%  { transform: scale(1.45) rotate(4deg); filter: brightness(2.5) drop-shadow(0 0 14px #ffd700); }
+  30%  { transform: translate(-3px, 2px) scale(1.3); }
+  38%  { transform: translate(3px, -2px) scale(1.3); }
+  46%  { transform: translate(-2px, -2px) scale(1.25); }
+  54%  { transform: translate(2px, 2px) scale(1.25); }
+  75%  { transform: scale(1.12); filter: brightness(1.5) drop-shadow(0 0 10px #ffd700); }
+  100% { transform: none; filter: none; }
+}
+.spark.gold { font-size: 22px; filter: drop-shadow(0 0 5px #ffd700) drop-shadow(0 0 10px #ffb800); }
+.fxe.pillar {
+  width: 70px; height: 150vh; margin-top: -75vh;
+  background: linear-gradient(90deg, transparent, rgba(255,236,150,.95), #fff, rgba(255,236,150,.95), transparent);
+  box-shadow: 0 0 30px 10px rgba(255,200,0,.6);
+  transform: translateX(-50%) scaleX(0); opacity: 0;
+  animation: pillar 1s ease-out forwards;
+}
+@keyframes pillar { 20% { transform: translateX(-50%) scaleX(1); opacity: 1; } 100% { transform: translateX(-50%) scaleX(.2); opacity: 0; } }
+.goldflash {
+  position: fixed; inset: 0; z-index: 28; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255,240,150,.9), rgba(255,196,0,.45) 45%, transparent 75%);
+  animation: gflash 1s ease-out forwards;
+}
+@keyframes gflash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== コイントス ===== */
+#coin-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(8,10,28,.85); display: flex; align-items: center; justify-content: center; }
+.coin-box { text-align: center; perspective: 700px; }
+.coin { position: relative; width: 130px; height: 130px; margin: 0 auto 24px; transform-style: preserve-3d; }
+.coin .face {
+  position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 60px; font-weight: 900; color: #7a4b00;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #f0b400 55%, #a87400);
+  border: 5px solid #ffd54a; box-shadow: 0 0 28px #ffd54a;
+}
+.coin .face.b { transform: rotateY(180deg); }
+#coin-text { font-size: 20px; font-weight: bold; color: #ffd86b; padding: 0 16px; }
+
+/* ===== 確認ポップなど ===== */
+#menu-panel .msg { font-size: 16px; line-height: 1.5; margin: 6px 0 12px; }
+.big .batk.gold { color: #a06a00; font-weight: bold; }
+.pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.pick { border-radius: 12px; border: 3px solid transparent; cursor: pointer; }
+.pick:active { border-color: #ffd86b; }
+.pick .big { margin: 0; padding: 6px; }
+.big.mini .bart { height: 84px; font-size: 44px; }
+.big.mini .bname { font-size: 14px; margin-top: 3px; }
+.big.mini .batk { font-size: 10.5px; margin-top: 3px; line-height: 1.3; }
+.big.mini .bar { margin: 3px 0; }
+.big.mini .bar.big { height: 16px; }
+.big.mini .bar.big b { font-size: 10px; line-height: 16px; }
