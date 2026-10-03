@@ -712,3 +712,49 @@ input[type=file] { color: var(--text); }
 /* ----- バトル画面は1画面に収める(スクロールしない) ----- */
 #screen-battle.active { height: 100dvh; padding: 6px; overflow: hidden; }
 #center { flex: 1 1 0; min-height: 34px; }
+
+/* =====================================================
+   2人で対戦(1台のスマホを向かい合わせで使う)
+   上の人(P2)の手札・情報・場は、画面ごと逆向きにして表示します
+   ===================================================== */
+#c-hand { display: none; }
+#screen-battle.pvp { --cw: 61px; --ch: 85px; }   /* カードを少し小さく(zoom .8)して1画面に収める */
+#screen-battle.pvp .card { width: 76px; height: 106px; zoom: .8; }
+#screen-battle.pvp #c-hand { order: 1; }
+#screen-battle.pvp #c-info { order: 2; }
+#screen-battle.pvp #c-field { order: 3; }
+#screen-battle.pvp #center { order: 4; }
+#screen-battle.pvp .row { order: 5; }
+#screen-battle.pvp #p-field { order: 6; }
+#screen-battle.pvp #p-info { order: 7; }
+#screen-battle.pvp #p-hand { order: 8; }
+#screen-battle.pvp #c-hand, #screen-battle.pvp #c-info, #screen-battle.pvp #c-field { transform: rotate(180deg); }
+#screen-battle.pvp #c-hand, #screen-battle.pvp #p-hand {
+  display: flex; gap: 4px; overflow-x: auto; flex-shrink: 0; padding: 2px; min-height: calc(var(--ch) + 4px);
+}
+#screen-battle.pvp .field { min-height: calc(var(--ch) + 4px); gap: 6px; }
+#screen-battle.pvp .info { height: 24px; gap: 4px; }
+#screen-battle.pvp .info .who { width: 22px; font-size: 12px; }
+#screen-battle.pvp .info .bar { height: 16px; min-width: 50px; }
+#screen-battle.pvp .info .bar.big b { font-size: 10px; line-height: 14px; }
+#screen-battle.pvp .gemsbox { min-width: 64px; font-size: 11px; }
+#screen-battle.pvp .stat { display: none; }
+#screen-battle.pvp #btn-end { display: none; }
+#screen-battle.pvp .row .btn { padding: 4px 8px; font-size: 12px; }
+#screen-battle.pvp #center { min-height: 30px; }
+#screen-battle.pvp #log div:nth-child(1) { display: none; }   /* 2人対戦は、ログを最新の2行にして場所をあける */
+.endbtn { flex: none; width: auto; padding: 3px 8px; margin: 0; font-size: 11px; }
+.info.turn .who { color: #fff; text-shadow: 0 0 8px var(--accent), 0 0 3px var(--accent); }
+.info.turn { box-shadow: inset 0 -2px 0 var(--accent); }
+#center.flip, .row.flip { transform: rotate(180deg); }
+#menu-panel.flip { transform: rotate(180deg); }
+
+/* 裏向きのカード */
+.card.back {
+  background: repeating-linear-gradient(45deg, #1a2150 0 6px, #232d66 6px 12px);
+  border-color: var(--accent); box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 2px 5px rgba(0,0,0,.6);
+}
+.card.back::before {
+  content: "✦"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 34px; color: var(--accent); text-shadow: 0 0 8px rgba(230,192,104,.7);
+}

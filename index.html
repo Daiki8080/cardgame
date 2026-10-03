@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -30,9 +30,14 @@
 <!-- ===== 対戦準備画面(デッキをえらぶ) ===== -->
 <section id="screen-ready" class="screen">
   <h2>対戦準備</h2>
-  <label>あなたのデッキ</label>
+  <label>対戦のあいて</label>
+  <select id="sel-mode">
+    <option value="cpu">CPUと対戦</option>
+    <option value="pvp">2人で対戦(1台のスマホで)</option>
+  </select>
+  <label id="l-p">あなたのデッキ</label>
   <select id="sel-player"></select>
-  <label>CPUのデッキ</label>
+  <label id="l-c">CPUのデッキ</label>
   <select id="sel-cpu"></select>
   <p id="ready-msg" class="note"></p>
   <button id="btn-battle" class="btn">バトル開始</button>
@@ -140,6 +145,7 @@
 
 <!-- ===== バトル画面 ===== -->
 <section id="screen-battle" class="screen">
+  <div id="c-hand"></div>
   <div id="c-info" class="info"></div>
   <div id="c-field" class="field"></div>
   <div id="center">
@@ -148,7 +154,7 @@
   </div>
   <div id="p-field" class="field"></div>
   <div id="p-info" class="info"></div>
-  <div class="row">
+  <div class="row" id="battle-row">
     <button id="btn-end" class="btn small">ターン終了</button>
     <button id="btn-cancel" class="btn small ghost" style="display:none">キャンセル</button>
     <button id="btn-quit" class="btn small ghost">やめる</button>
@@ -186,6 +192,6 @@
   </div>
 </div>
 
-<script src="game.js?v=6"></script>
+<script src="game.js?v=7"></script>
 </body>
 </html>

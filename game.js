@@ -616,13 +616,24 @@ function renderReady() {
   $("sel-cpu").innerHTML = '<option value="auto">おまかせ(ゲームのデッキ)</option>' + decks.map(opt).join("");
   if (decks.some(d => d.id === sel.p)) $("sel-player").value = sel.p;
   if (sel.c === "auto" || decks.some(d => d.id === sel.c)) $("sel-cpu").value = sel.c;
-  $("ready-msg").textContent = decks.length === 0
-    ? "通常カード10枚そろったデッキがありません。先に「デッキ編成」でデッキを作ってください。"
-    : "CPUには、自分で作ったデッキも使えます。先攻・後攻は、バトル開始のコイントスで決まります。";
+  $("sel-mode").value = sel.m === "pvp" ? "pvp" : "cpu";
+  updateReadyLabels();
   $("btn-battle").disabled = decks.length === 0;
 }
+// 「CPUと対戦」「2人で対戦」で、表示する文字をかえる
+function updateReadyLabels() {
+  const pvp = $("sel-mode").value === "pvp";
+  const decks = loadDecks().filter(deckValid);
+  $("l-p").textContent = pvp ? "プレイヤー1のデッキ(下がわ)" : "あなたのデッキ";
+  $("l-c").textContent = pvp ? "プレイヤー2のデッキ(上がわ)" : "CPUのデッキ";
+  $("ready-msg").textContent = decks.length === 0
+    ? "通常カード10枚そろったデッキがありません。先に「デッキ編成」でデッキを作ってください。"
+    : pvp ? "1台のスマホを2人で向かい合って使います。自分のターンだけ、手札が表向きになります。先攻・後攻は、コイントスで決まります。"
+          : "CPUには、自分で作ったデッキも使えます。先攻・後攻は、バトル開始のコイントスで決まります。";
+}
+$("sel-mode").addEventListener("change", updateReadyLabels);
 $("btn-battle").onclick = () => {
-  saveSel({ p: $("sel-player").value, c: $("sel-cpu").value });
+  saveSel({ p: $("sel-player").value, c: $("sel-cpu").value, m: $("sel-mode").value });
   startBattle();
 };
 
@@ -642,7 +653,17 @@ function shuffle(a) {
   }
   return a;
 }
-function who(side) { return side === G.player ? "あなた" : "CPU"; }
+// 2人で対戦(pvp)のときは、下がプレイヤー1、上がプレイヤー2
+function isPvp() { return !!G && G.mode === "pvp"; }
+function who(side) {
+  if (isPvp()) return side === G.player ? "プレイヤー1" : "プレイヤー2";
+  return side === G.player ? "あなた" : "CPU";
+}
+function isAI(side) { return !isPvp() && side === G.cpu; }       // CPUが動かしている側か
+function sideOf(name) { return name === "player" ? G.player : G.cpu; }
+function humanTurn() { return isPvp() || G.turn === "player"; }  // いま人間が操作するターンか
+function me() { return sideOf(G.turn); }                         // いま操作している人の側(CPU戦では常に自分)
+function opp() { return foe(me()); }
 function foe(side) { return side === G.player ? G.cpu : G.player; }
 function infoEl(side) { return side === G.player ? $("p-info") : $("c-info"); }
 function addLog(text) { G.log.push(text); if (G.log.length > 50) G.log.shift(); }
@@ -719,14 +740,18 @@ async function startBattle() {
     const cd = decks.find(d => d.id === sel.c);
     if (cd && deckValid(cd)) cChars = deckCards(cd);
   }
-  G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: true, over: false, log: [], acting: null, first: "player" };
+  G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: true, over: false, log: [], acting: null, first: "player",
+        mode: sel.m === "pvp" ? "pvp" : "cpu", live: false };
   T = null;
   show("battle");
+  $("screen-battle").classList.toggle("pvp", G.mode === "pvp");   // 2人対戦は、上下向かい合わせの画面
   render();
   // コイントスで先攻・後攻を決める
   G.first = await coinToss();
-  addLog(G.first === "player" ? "コイントス:あなたの先攻!" : "コイントス:CPUの先攻!");
-  if (G.first === "player") startPlayerTurn();
+  G.live = true;
+  addLog(`コイントス:${who(sideOf(G.first))}の先攻!`);
+  if (isPvp()) startHumanTurn(G.first);
+  else if (G.first === "player") startPlayerTurn();
   else await cpuTurn();
 }
 
@@ -751,7 +776,7 @@ async function coinToss() {
   ov.classList.add("landed");
   $("coin-text").textContent = first ? "FIRST" : "SECOND";
   $("coin-text").className = "show";
-  $("coin-sub").textContent = first ? "あなたの先攻!" : "CPUの先攻!";
+  $("coin-sub").textContent = who(first ? G.player : G.cpu) + "の先攻!";
   await sleep(750);
   ov.classList.add("hidden");
   return first ? "player" : "cpu";
@@ -771,12 +796,14 @@ function beginTurn(side) {
   addLog(`${who(side)}のターン(ドロー${card ? "1枚" : "なし"}、💎+${gain})`);
 }
 
-function startPlayerTurn() {
-  G.turn = "player";
-  beginTurn(G.player);
+// 人間のターンを始める(name は "player" か "cpu"。CPU戦では "player" だけ使う)
+function startHumanTurn(name) {
+  G.turn = name;
+  beginTurn(sideOf(name));
   G.busy = false;
   render();
 }
+function startPlayerTurn() { startHumanTurn("player"); }
 
 function useCostCard(side, card) {
   side.hand = side.hand.filter(c => c !== card);
@@ -873,7 +900,7 @@ async function useItem(side, card, target, target2) {
   side.down.push(card);
   if (card.kind === "laser") side.cost -= LASER_COST;
   addLog(`${who(side)}は「${card.name}」を使った!`);
-  if (side === G.cpu) { render(); await wait(900); }   // CPUのときは、まず何を使ったか見せる
+  if (isAI(side)) { render(); await wait(900); }   // CPUのときは、まず何を使ったか見せる
 
   const k = card.kind;
   if (k === "healPlayer") {
@@ -951,7 +978,7 @@ async function useItem(side, card, target, target2) {
 
 async function doGuard(side, ch) {
   if (ch.acted) return false;
-  if (side === G.cpu) { G.acting = ch.uid; render(); await wait(800); }
+  if (isAI(side)) { G.acting = ch.uid; render(); await wait(800); }
   ch.guard = true;
   ch.acted = true;
   G.acting = null;
@@ -999,7 +1026,7 @@ async function doSkill(side, ch, n, target) {
   addLog(`${who(side)}の${ch.name}「${sk.name}」${mult === 2 ? "🧸" : ""}`);
   G.acting = ch.uid;
   render();
-  if (side === G.cpu) await wait(800);             // CPUのときは、誰が動くか見せる
+  if (isAI(side)) await wait(800);             // CPUのときは、誰が動くか見せる
 
   // 回復
   if (sk.type === "heal") {
@@ -1018,7 +1045,7 @@ async function doSkill(side, ch, n, target) {
   // 前に飛び出す動き
   const atkEl = cardEl(ch.uid);
   if (atkEl) {
-    atkEl.classList.add(side === G.player ? "lunge-up" : "lunge-down");
+    atkEl.classList.add(isPvp() || side === G.player ? "lunge-up" : "lunge-down");   // 2人対戦の上側は、画面ごと逆向きなので同じ向き
     await sleep(450);
   }
   G.acting = null;
@@ -1094,7 +1121,7 @@ async function doPowerUp(side, pcard) {
   addLog(`${who(side)}の${base.name}がパワーアップ!`);
   G.acting = base.uid;
   render();
-  if (side === G.cpu) await wait(800);
+  if (isAI(side)) await wait(800);
 
   // 力をためる(ビビビと細かくふるえる)
   const bel = cardEl(base.uid);
@@ -1367,7 +1394,14 @@ async function aiPlay(side) {
 }
 
 // ---------- ⑪ バトル画面の表示と操作 ----------
-function infoHTML(side, label, showHand) {
+function infoHTML(side, label, showHand, name) {
+  if (isPvp()) {   // 2人対戦:ターン終了ボタンを、それぞれの情報の行に入れる
+    const on = G.over || G.busy || G.turn !== name || !!T;
+    return `<div class="who">${name === "player" ? "P1" : "P2"}</div>
+      ${barHTML(side, side.hp, START_HP, "big", "HP " + Math.max(0, side.hp))}
+      <div class="gemsbox">${gemsHTML(side.cost)}</div>
+      <button class="btn small endbtn" data-end="${name}"${on ? " disabled" : ""}>ターン終了</button>`;
+  }
   return `<div class="who">${label}</div>
     ${barHTML(side, side.hp, START_HP, "big", "HP " + Math.max(0, side.hp))}
     <div class="gemsbox">${gemsHTML(side.cost)}</div>
@@ -1378,24 +1412,40 @@ function fieldHTML(list) {
   for (let i = 0; i < FIELD_MAX; i++) h += list[i] ? cardHTML(list[i], "", true) : '<div class="slot"></div>';
   return h;
 }
+// 手札。2人対戦では、いまターンの人の手札だけ表向き、もう片方は裏向き
+function handHTML(side, name) {
+  const faceUp = isPvp() ? (G.live && G.turn === name) : name === "player";
+  return faceUp ? side.hand.map(c => cardHTML(c)).join("") : side.hand.map(() => '<div class="card back"></div>').join("");
+}
 
 function render() {
   if (!G) return;
+  const pvp = isPvp();
   const handScroll = $("p-hand").scrollLeft;   // 手札のスクロール位置をおぼえておく
-  $("c-info").innerHTML = infoHTML(G.cpu, "CPU", true);
-  $("p-info").innerHTML = infoHTML(G.player, "あなた", false);
+  const handScroll2 = $("c-hand").scrollLeft;
+  $("c-info").innerHTML = infoHTML(G.cpu, pvp ? "P2" : "CPU", true, "cpu");
+  $("p-info").innerHTML = infoHTML(G.player, "あなた", false, "player");
   $("c-field").innerHTML = fieldHTML(G.cpu.field);
   $("p-field").innerHTML = fieldHTML(G.player.field);
-  $("p-hand").innerHTML = G.player.hand.map(c => cardHTML(c)).join("");
+  $("p-hand").innerHTML = handHTML(G.player, "player");
+  $("c-hand").innerHTML = pvp ? handHTML(G.cpu, "cpu") : "";
   $("p-hand").scrollLeft = handScroll;
+  $("c-hand").scrollLeft = handScroll2;
+  $("p-info").classList.toggle("turn", pvp && !G.over && G.turn === "player");
+  $("c-info").classList.toggle("turn", pvp && !G.over && G.turn === "cpu");
+  // 2人対戦で上の人のターンのときは、まん中の文字・ボタンを逆向きにして、上の人が読めるようにする
+  const flip = pvp && G.turn === "cpu";
+  $("center").classList.toggle("flip", flip);
+  $("battle-row").classList.toggle("flip", flip);
 
   let label;
   if (G.over) label = "バトル終了";
   else if (T) label = "👆 " + T.prompt;
+  else if (pvp) label = "▶ " + who(me()) + "のターン";
   else label = G.turn === "player" ? "▶ あなたのターン" : "CPUのターン…";
   $("turn-label").textContent = label;
   $("log").innerHTML = G.log.slice(-3).map(t => `<div>${esc(t)}</div>`).join("");   // 最新の3行
-  $("btn-end").disabled = G.over || G.busy || G.turn !== "player" || !!T;
+  $("btn-end").disabled = G.over || G.busy || !humanTurn() || !!T;
   $("btn-cancel").style.display = T ? "block" : "none";
   animateBars();
 }
@@ -1406,9 +1456,10 @@ function closeMenu() { $("menu").classList.remove("open"); }
 function openMenu(opt) {
   const panel = $("menu-panel");
   panel.onclick = null;
+  panel.classList.toggle("flip", isPvp() && G.turn === "cpu");   // 上の人のターンは逆向きに出す
   let h = "";
   // 自分のカードのメニューには、いま持っているコストを出す
-  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト ${gemsHTML(G.player.cost)}</div>`;
+  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト ${gemsHTML(me().cost)}</div>`;
   if (opt.card) h += bigCardHTML(opt.card, false, true);
   if (opt.title) h += `<h3>${esc(opt.title)}</h3>`;
   if (opt.msg) h += `<p class="msg">${esc(opt.msg)}</p>`;
@@ -1436,6 +1487,7 @@ $("menu").addEventListener("click", e => { if (e.target.id === "menu") closeMenu
 // カードを並べて見せて、タップでえらばせる(キャラ復活など)
 function openPicker(title, list, onPick) {
   const panel = $("menu-panel");
+  panel.classList.toggle("flip", isPvp() && G.turn === "cpu");
   panel.innerHTML = `<h3>${esc(title)}</h3><p class="note">カードをタップしてえらびます</p><div class="pick-grid">` +
     list.map(c => `<div class="pick" data-uid="${c.uid}">${bigCardHTML(Object.assign({}, c, { hp: c.maxHp }), true)}</div>`).join("") + "</div>";
   panel.onclick = e => {
@@ -1461,7 +1513,7 @@ function startTarget(prompt, list, onPick) {
 $("btn-cancel").onclick = () => { T = null; render(); };
 
 function findCard(uid) {
-  return G.player.field.concat(G.player.hand, G.cpu.field).find(c => c.uid === uid);
+  return G.player.field.concat(G.player.hand, G.cpu.field, G.cpu.hand).find(c => c.uid === uid);
 }
 
 // 操作中は他の操作ができないようにして実行
@@ -1470,13 +1522,13 @@ async function run(fn) {
   G.busy = true;
   render();
   await fn();
-  if (!G.over && G.turn === "player") G.busy = false;
+  if (!G.over && humanTurn()) G.busy = false;
   render();
 }
 
 // ----- 手札のカードをタップ -----
 function handMenu(card) {
-  const p = G.player;
+  const p = me();
   if (card.type === "cost") {
     openMenu({ card, buttons: [{ label: "使う(💎+1)",
       action: () => run(async () => { useCostCard(p, card); render(); gemFx(p); await sleep(400); }) }] });
@@ -1495,7 +1547,7 @@ function handMenu(card) {
 }
 
 function itemMenu(card) {
-  const p = G.player;
+  const p = me();
   const k = card.kind;
   const why = itemBlock(p, card);
   const use = (label, action) =>
@@ -1543,7 +1595,7 @@ function skillBtnLabel(sk, n, m) {
 }
 
 function fieldMenu(ch) {
-  const p = G.player;
+  const p = me();
   const m = ch.plush ? 2 : 1;
   let note = ch.acted ? "このターンはもう行動しました" : "";
   if (!ch.acted && ch.plush) note = "🧸次の攻撃は、💎も2倍・ダメージも2倍";
@@ -1562,9 +1614,9 @@ function fieldMenu(ch) {
 
 // 技の対象をえらぶ(相手や味方のカードが光るので、タップする)
 function chooseSkillTarget(ch, n) {
-  const p = G.player;
+  const p = me();
   const sk = skillOf(ch, n);
-  const foeSide = G.cpu;
+  const foeSide = opp();
   if (sk.type === "all") { run(() => doSkill(p, ch, n, null)); return; }
   if (sk.type === "heal") {
     startTarget("回復するキャラをタップ", p.field, t => run(() => doSkill(p, ch, n, t)));
@@ -1578,8 +1630,13 @@ function chooseSkillTarget(ch, n) {
 
 // カードのタップをまとめて受け取る
 $("screen-battle").addEventListener("click", e => {
-  if (!G || G.over || G.busy || G.turn !== "player") return;
+  if (!G || G.over) return;
+  // 2人対戦の「ターン終了」ボタン
+  const eb = e.target.closest("[data-end]");
+  if (eb) { if (!eb.disabled) tryEndTurn(); return; }
+  if (G.busy || !humanTurn()) return;
   const el = e.target.closest(".card");
+  if (el && el.classList.contains("back")) return;   // 裏向きのカードは何もしない
 
   // 対象をえらんでいる最中は、光っているカードだけ反応する
   if (T) {
@@ -1597,30 +1654,37 @@ $("screen-battle").addEventListener("click", e => {
   if (!el) return;
   const zone = el.parentElement.id;
   const uid = Number(el.dataset.uid);
-  if (zone === "p-hand") {
-    const card = G.player.hand.find(c => c.uid === uid);
+  const mine = G.turn === "player" ? "p" : "c";      // いま操作している人の場所(p=下 / c=上)
+  const other = mine === "p" ? "c" : "p";
+  if (zone === mine + "-hand") {
+    const card = me().hand.find(c => c.uid === uid);
     if (card) handMenu(card);
-  } else if (zone === "p-field") {
-    const ch = G.player.field.find(c => c.uid === uid);
+  } else if (zone === mine + "-field") {
+    const ch = me().field.find(c => c.uid === uid);
     if (ch) fieldMenu(ch);
-  } else if (zone === "c-field") {
-    const ch = G.cpu.field.find(c => c.uid === uid);
+  } else if (zone === other + "-field") {
+    const ch = opp().field.find(c => c.uid === uid);
     if (ch) openMenu({ card: ch, noGems: true });   // 相手のカードは情報を見るだけ
   }
 });
 
 function endTurn() {
-  if (!G || G.busy || G.over || G.turn !== "player" || T) return;
+  if (!G || G.busy || G.over || !humanTurn() || T) return;
   G.busy = true;
-  addLog("あなたはターンを終了した");
+  addLog(`${who(me())}はターンを終了した`);
   render();
   const seq = battleSeq;
-  setTimeout(() => { if (seq === battleSeq) cpuTurn(); }, 600 * SPEED);
+  if (isPvp()) {   // 2人対戦:相手のターンへ(手札の表と裏が入れかわる)
+    const next = G.turn === "player" ? "cpu" : "player";
+    setTimeout(() => { if (seq === battleSeq && !G.over) startHumanTurn(next); }, 450 * SPEED);
+  } else {
+    setTimeout(() => { if (seq === battleSeq) cpuTurn(); }, 600 * SPEED);
+  }
 }
-$("btn-end").onclick = () => {
-  if (!G || G.busy || G.over || G.turn !== "player" || T) return;
+function tryEndTurn() {
+  if (!G || G.busy || G.over || !humanTurn() || T) return;
   // まだ何も行動していないキャラがいたら、確認する
-  const idle = G.player.field.filter(c => !c.acted);
+  const idle = me().field.filter(c => !c.acted);
   if (idle.length > 0) {
     openMenu({ title: "確認", noClose: true,
       msg: `${idle.map(c => c.name).join("、")}の行動指示がありませんがよろしいですか?`,
@@ -1628,7 +1692,8 @@ $("btn-end").onclick = () => {
     return;
   }
   endTurn();
-};
+}
+$("btn-end").onclick = tryEndTurn;
 $("btn-quit").onclick = () => {
   // CPUのターン中でもやめられる
   if (confirm("バトルをやめてタイトルに戻りますか?")) {
