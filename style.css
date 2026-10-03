@@ -423,7 +423,7 @@ input[type=file] { color: var(--text); }
 
 /* イラスト(カード全体) */
 .card .art {
-  position: absolute; inset: 0; width: auto; height: auto; padding-bottom: 38px; border: 0; border-radius: 0;
+  position: absolute; inset: 0; width: auto; height: auto; padding-bottom: 30px; border: 0; border-radius: 0;
   display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 35%, #ffffff, #c9d1e0 75%);
 }
@@ -436,43 +436,35 @@ input[type=file] { color: var(--text); }
 .card.item .art { background: radial-gradient(circle at 50% 38%, #c8f5f1, #2b8f89 80%); }
 .card.cost .art { background: radial-gradient(circle at 50% 38%, #e6d8ff, #6b47b8 80%); }
 
-/* 左上の丸いバッジ(いまのHP) */
-.card .hpbadge, .big .hpbadge {
-  position: absolute; left: 3px; top: 3px; z-index: 3; min-width: 22px; height: 22px; padding: 0 2px;
-  border-radius: 11px; border: 2px solid #f0cd6a; text-align: center; line-height: 18px;
-  font-family: var(--font-display); font-size: 10.5px; font-weight: 800; color: #fff;
-  text-shadow: 0 1px 1px rgba(0,0,0,.8); box-shadow: 0 1px 4px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.35);
-  background: radial-gradient(circle at 35% 30%, #3fae6a, #0f4527);
-}
-.hpbadge.y { background: radial-gradient(circle at 35% 30%, #e1b52c, #6e4d06); }
-.hpbadge.r { background: radial-gradient(circle at 35% 30%, #ea5a4b, #6e130c); }
+/* HPの数字(ゲージの右がわに小さく) */
+.card .hpnum { position: absolute; right: 4px; top: 54px; width: 22px; z-index: 3; text-align: right; font-size: 8px; line-height: 7px; font-weight: 800; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
 
 /* HPゲージ(細く、イラストの下のほうに) */
 .card .bar {
-  position: absolute; left: 5px; right: 5px; top: 42px; height: 6px; margin: 0; z-index: 2;
+  position: absolute; left: 4px; right: 27px; top: 55px; height: 5px; margin: 0; z-index: 2;
   background: rgba(0,0,0,.7); border: 1px solid #0b0905; border-radius: 3px;
 }
 .card .bar b { display: none; }
 .bar i.g::after, .bar i.y::after, .bar i.r::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 45%; background: rgba(255,255,255,.4); }
 
-/* 名前のリボン */
+/* 名前のリボン(すこし透ける) */
 .card .cname {
-  position: absolute; left: -1px; right: -1px; top: 50px; height: 14px; margin: 0; padding: 0 3px; z-index: 2;
-  line-height: 14px; text-align: center; font-size: 9.5px; letter-spacing: .02em; color: #fff;
-  background: var(--rib); border-top: 1px solid #f3dc92; border-bottom: 1px solid #f3dc92;
+  position: absolute; left: -1px; right: -1px; top: 62px; height: 12px; margin: 0; padding: 0 3px; z-index: 2;
+  line-height: 12px; text-align: center; font-size: 8.5px; letter-spacing: .02em; color: #fff;
+  background: var(--rib); opacity: .93; border-top: 1px solid #f3dc92; border-bottom: 1px solid #f3dc92;
   text-shadow: 0 1px 1px rgba(0,0,0,.85);
 }
 .card.power .cname { color: #3a2400; text-shadow: 0 1px 0 rgba(255,255,255,.5); }
 
-/* 技の欄(羊皮紙) */
+/* 技の欄(うす暗い透明の板。小さく) */
 .card .skills, .card .desc {
-  position: absolute; left: 2px; right: 2px; bottom: 2px; height: 34px; z-index: 2;
-  background: linear-gradient(#f8edcb, #e8d4a0); border: 1px solid #8a6a2a; border-radius: 4px;
+  position: absolute; left: 2px; right: 2px; bottom: 2px; height: 24px; z-index: 2;
+  background: rgba(24,17,6,.72); border: 1px solid rgba(240,205,106,.7); border-radius: 3px;
 }
-.card .skills { padding: 2px 3px; display: flex; flex-direction: column; justify-content: space-around; }
-.card .catk { font-size: 8px; line-height: 1.2; white-space: nowrap; overflow: hidden; color: #3a2a12; font-weight: 600; }
-.card .catk + .catk { border-top: 1px solid rgba(138,106,42,.45); }
-.card .desc { padding: 2px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 8.5px; line-height: 1.2; font-weight: 600; }
+.card .skills { padding: 1px 3px; display: flex; flex-direction: column; justify-content: space-around; }
+.card .catk { font-size: 7.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; color: #fff0c8; font-weight: 600; }
+.card .catk + .catk { border-top: 1px solid rgba(240,205,106,.35); }
+.card .desc { padding: 1px 2px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 7.5px; line-height: 1.15; font-weight: 600; color: #fff0c8; }
 
 .card .badge { text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .card.done { opacity: .62; filter: grayscale(.45); }
@@ -505,9 +497,218 @@ input[type=file] { color: var(--text); }
 .big .bar.big i { border-radius: 10px; }
 .big .batk { padding: 0 10px; margin-top: 6px; font-weight: 600; }
 .big > .batk:last-child { padding-bottom: 10px; }
-.big .hpbadge { left: 8px; top: 8px; min-width: 36px; height: 36px; border-radius: 18px; line-height: 32px; font-size: 16px; }
+.big.mini .bart { height: 84px; font-size: 44px; }
+.big.mini .bname { font-size: 14px; margin-top: 3px; }
+.big.mini .batk { font-size: 10.5px; margin-top: 3px; line-height: 1.3; }
+.big.mini .bar { margin: 3px 0; }
+.big.mini .bar.big { height: 16px; }
+.big.mini .bar.big b { font-size: 10px; line-height: 15px; }
+
+/* ===== パワーアップ・身代わり ===== */
+.power-box { background: rgba(255,196,0,.08); border: 1px solid #ffc400; border-radius: 10px; padding: 4px 12px 10px; margin-top: 10px; }
+.card.power { border-color: #ffc400; background: linear-gradient(135deg, #fff7d1, #ffe39a); box-shadow: 0 0 8px 1px #ffd24a; }
+.card.decoy { border-color: #9b59ff; box-shadow: 0 0 10px 2px #9b59ff; }
+.card.guard.power { box-shadow: 0 0 10px 3px #ff3030; }
+
+/* パワーアップの演出:力をためてビビビ → 金色にピカッ */
+.card.charging { z-index: 6; animation: buzz .07s linear infinite; filter: drop-shadow(0 0 8px #ffd700) brightness(1.3); }
+@keyframes buzz {
+  0%   { transform: translate(-2px, 1px) scale(1.08); }
+  25%  { transform: translate(2px, -1px) scale(1.08); }
+  50%  { transform: translate(-1px, -2px) scale(1.08); }
+  75%  { transform: translate(1px, 2px) scale(1.08); }
+  100% { transform: translate(-2px, 1px) scale(1.08); }
+}
+.card.powerup-in { z-index: 6; animation: powerIn 1.6s ease-out; }
+@keyframes powerIn {
+  0%   { transform: scale(.3) rotate(-10deg); filter: brightness(5); }
+  18%  { transform: scale(1.45) rotate(4deg); filter: brightness(2.5) drop-shadow(0 0 14px #ffd700); }
+  30%  { transform: translate(-3px, 2px) scale(1.3); }
+  38%  { transform: translate(3px, -2px) scale(1.3); }
+  46%  { transform: translate(-2px, -2px) scale(1.25); }
+  54%  { transform: translate(2px, 2px) scale(1.25); }
+  75%  { transform: scale(1.12); filter: brightness(1.5) drop-shadow(0 0 10px #ffd700); }
+  100% { transform: none; filter: none; }
+}
+.spark.gold { font-size: 22px; filter: drop-shadow(0 0 5px #ffd700) drop-shadow(0 0 10px #ffb800); }
+.fxe.pillar {
+  width: 70px; height: 150vh; margin-top: -75vh;
+  background: linear-gradient(90deg, transparent, rgba(255,236,150,.95), #fff, rgba(255,236,150,.95), transparent);
+  box-shadow: 0 0 30px 10px rgba(255,200,0,.6);
+  transform: translateX(-50%) scaleX(0); opacity: 0;
+  animation: pillar 1s ease-out forwards;
+}
+@keyframes pillar { 20% { transform: translateX(-50%) scaleX(1); opacity: 1; } 100% { transform: translateX(-50%) scaleX(.2); opacity: 0; } }
+.goldflash {
+  position: fixed; inset: 0; z-index: 28; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255,240,150,.9), rgba(255,196,0,.45) 45%, transparent 75%);
+  animation: gflash 1s ease-out forwards;
+}
+@keyframes gflash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== コイントス(FIRST / SECOND) ===== */
+#coin-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 45%, rgba(0,0,0,.7), rgba(0,0,0,.95)); }
+.coin-box { text-align: center; width: 100%; }
+#coin-label { font-family: var(--font-display); font-size: 13px; letter-spacing: .55em; padding-left: .55em; color: var(--accent); margin-bottom: 18px; }
+.coin-stage { position: relative; height: 200px; display: flex; align-items: flex-end; justify-content: center; }
+.coin-wrap { width: 120px; height: 120px; margin-bottom: 8px; perspective: 600px; }
+.coin-wrap.toss { animation: coinToss 1s cubic-bezier(.3,.5,.4,1); }
+@keyframes coinToss {
+  0%   { transform: translateY(0) scale(1); }
+  42%  { transform: translateY(-78px) scale(1.4); }
+  78%  { transform: translateY(0) scale(1); }
+  88%  { transform: translateY(-12px) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+.coin { position: relative; width: 120px; height: 120px; transform-style: preserve-3d; }
+.coin .face {
+  position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 19px; letter-spacing: .08em; color: var(--coin-c);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,.85), transparent 42%),
+    conic-gradient(from 30deg, var(--coin-a), var(--coin-b), var(--coin-a), var(--coin-c), var(--coin-a));
+  border: 3px solid var(--coin-a);
+  box-shadow: inset 0 0 0 6px rgba(0,0,0,.18), inset 0 0 16px rgba(0,0,0,.45), 0 0 26px var(--coin-b);
+}
+.coin .face::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; border: 1px dashed rgba(0,0,0,.4); }
+.coin .face.b { transform: rotateX(180deg); }
+#coin-text {
+  font-family: var(--font-display); font-weight: 700; font-size: 44px; letter-spacing: .16em; padding-left: .16em;
+  height: 56px; line-height: 56px; opacity: 0; transform: scale(.6);
+  background: linear-gradient(180deg, #fff, var(--accent) 55%, var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+}
+#coin-text.show { animation: coinText .4s cubic-bezier(.2,1.5,.4,1) forwards; }
+@keyframes coinText { to { opacity: 1; transform: scale(1); } }
+#coin-sub { margin-top: 6px; min-height: 22px; font-size: 15px; letter-spacing: .3em; padding-left: .3em; color: var(--text); }
+.coin-stage::after {
+  content: ""; position: absolute; left: 50%; bottom: 68px; width: 24px; height: 24px; margin-left: -12px;
+  border-radius: 50%; border: 2px solid var(--accent); opacity: 0;
+}
+#coin-overlay.landed .coin-stage::after { animation: landRing .7s ease-out; }
+@keyframes landRing { 0% { opacity: 1; transform: scale(.4); } 100% { opacity: 0; transform: scale(9); } }
+
+/* =====================================================
+   カードのデザイン
+   ・イラストはカード全体に大きく表示
+   ・名前は「色つきのリボン」(技の種類で色がかわる)
+   ・左上の丸いバッジが、いまのHP
+   ・技は下の「羊皮紙」の欄
+   ===================================================== */
+.card {
+  display: block; padding: 0; overflow: hidden;
+  border: 3px solid #14110d; border-radius: 10px; background: #14110d; color: #3a2a12;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.28), 0 3px 8px rgba(0,0,0,.65);
+  --rib: linear-gradient(180deg, #e0493f, #8f1d1a);   /* リボンの色(下で種類ごとに変える) */
+}
+/* 技の種類ごとのリボンの色 */
+.k-attack    { --rib: linear-gradient(180deg, #e0493f, #8f1d1a); }
+.k-heal      { --rib: linear-gradient(180deg, #46bd74, #1b6a3b); }
+.k-all       { --rib: linear-gradient(180deg, #a463dd, #55288f); }
+.k-sacrifice { --rib: linear-gradient(180deg, #f59a38, #9c4a08); }
+.k-chance    { --rib: linear-gradient(180deg, #4698ea, #1a4b8f); }
+.k-item      { --rib: linear-gradient(180deg, #34bdb1, #146a64); }
+.k-cost      { --rib: linear-gradient(180deg, #9473d8, #482c8a); }
+.k-power     { --rib: linear-gradient(180deg, #fbe08a, #b8862a); }
+
+/* イラスト(カード全体) */
+.card .art {
+  position: absolute; inset: 0; width: auto; height: auto; padding-bottom: 30px; border: 0; border-radius: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 35%, #ffffff, #c9d1e0 75%);
+}
+.card .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.card .art::after {   /* うえ・したを少しくらくして、文字を読みやすく */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,.28), transparent 28%, transparent 55%, rgba(0,0,0,.4));
+}
+.card .emoji, .card .icon { position: relative; font-size: 38px; }
+.card.item .art { background: radial-gradient(circle at 50% 38%, #c8f5f1, #2b8f89 80%); }
+.card.cost .art { background: radial-gradient(circle at 50% 38%, #e6d8ff, #6b47b8 80%); }
+
+/* HPの数字(ゲージの右がわに小さく) */
+.card .hpnum { position: absolute; right: 4px; top: 54px; width: 22px; z-index: 3; text-align: right; font-size: 8px; line-height: 7px; font-weight: 800; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+
+/* HPゲージ(細く、イラストの下のほうに) */
+.card .bar {
+  position: absolute; left: 4px; right: 27px; top: 55px; height: 5px; margin: 0; z-index: 2;
+  background: rgba(0,0,0,.7); border: 1px solid #0b0905; border-radius: 3px;
+}
+.card .bar b { display: none; }
+.bar i.g::after, .bar i.y::after, .bar i.r::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 45%; background: rgba(255,255,255,.4); }
+
+/* 名前のリボン(すこし透ける) */
+.card .cname {
+  position: absolute; left: -1px; right: -1px; top: 62px; height: 12px; margin: 0; padding: 0 3px; z-index: 2;
+  line-height: 12px; text-align: center; font-size: 8.5px; letter-spacing: .02em; color: #fff;
+  background: var(--rib); opacity: .93; border-top: 1px solid #f3dc92; border-bottom: 1px solid #f3dc92;
+  text-shadow: 0 1px 1px rgba(0,0,0,.85);
+}
+.card.power .cname { color: #3a2400; text-shadow: 0 1px 0 rgba(255,255,255,.5); }
+
+/* 技の欄(うす暗い透明の板。小さく) */
+.card .skills, .card .desc {
+  position: absolute; left: 2px; right: 2px; bottom: 2px; height: 24px; z-index: 2;
+  background: rgba(24,17,6,.72); border: 1px solid rgba(240,205,106,.7); border-radius: 3px;
+}
+.card .skills { padding: 1px 3px; display: flex; flex-direction: column; justify-content: space-around; }
+.card .catk { font-size: 7.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; color: #fff0c8; font-weight: 600; }
+.card .catk + .catk { border-top: 1px solid rgba(240,205,106,.35); }
+.card .desc { padding: 1px 2px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 7.5px; line-height: 1.15; font-weight: 600; color: #fff0c8; }
+
+.card .badge { text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.card.done { opacity: .62; filter: grayscale(.45); }
+.card.power { border-color: #f5c542; }
+.card.power:not(.guard)::after {   /* パワーアップカードは、金色の光がときどきサーッと走る */
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.7) 50%, transparent 62%);
+  background-size: 300% 100%; animation: foil 3.2s ease-in-out infinite;
+}
+@keyframes foil { 0%, 55% { background-position: 150% 0; } 100% { background-position: -60% 0; } }
+.card.guard { background: #14110d; }
+.card.guard::after { z-index: 4; }
+
+/* ----- 画面上のHPゲージ(あなた・CPU) ----- */
+.info .bar { height: 20px; border: 1px solid var(--accent); border-radius: 10px; background: rgba(0,0,0,.55); box-shadow: inset 0 1px 4px rgba(0,0,0,.7); }
+.info .bar i { border-radius: 10px; }
+
+/* ----- メニューの大きいカード ----- */
+.big { position: relative; padding: 0; overflow: hidden; background: linear-gradient(#f8edcb, #e8d4a0); color: #3a2a12;
+  border: 4px solid #14110d; border-radius: 16px; box-shadow: 0 0 0 1px rgba(255,255,255,.28), 0 4px 12px rgba(0,0,0,.6);
+  --rib: linear-gradient(180deg, #e0493f, #8f1d1a); }
+.big .bart { height: 170px; border-radius: 0; font-size: 90px; background: radial-gradient(circle at 50% 35%, #fff, #c9d1e0 75%); }
+.big .bname { margin: 0; padding: 4px 8px; font-size: 19px; color: #fff; background: var(--rib);
+  border-top: 2px solid #f3dc92; border-bottom: 2px solid #f3dc92; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+.big.k-power .bname { color: #3a2400; text-shadow: 0 1px 0 rgba(255,255,255,.5); }
+.big.k-item .bart { background: radial-gradient(circle at 50% 38%, #c8f5f1, #2b8f89 80%); }
+.big.k-cost .bart { background: radial-gradient(circle at 50% 38%, #e6d8ff, #6b47b8 80%); }
+.big .bar { margin: 8px 12px 4px; border: 1px solid #0b0905; background: rgba(0,0,0,.7); }
+.big .bar.big { border-radius: 10px; }
+.big .bar.big i { border-radius: 10px; }
+.big .batk { padding: 0 10px; margin-top: 6px; font-weight: 600; }
+.big > .batk:last-child { padding-bottom: 10px; }
 .big.mini .bart { height: 84px; font-size: 44px; }
 .big.mini .bname { font-size: 13px; padding: 2px 4px; }
-.big.mini .hpbadge { left: 4px; top: 4px; min-width: 24px; height: 24px; border-radius: 12px; line-height: 20px; font-size: 11px; }
 .big.mini .bar { margin: 4px 6px; }
 .big.mini .batk { padding: 0 5px; }
+
+/* ----- メニューの大きいカード:よこ向きにコンパクト(画面に収まるように) ----- */
+.big.compact { display: flex; align-items: stretch; margin-bottom: 8px; border-width: 3px; border-radius: 12px; text-align: left; }
+.big.compact .bart { flex: 0 0 96px; height: auto; min-height: 112px; font-size: 52px; }
+.big.compact .side { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.big.compact .bname { font-size: 15px; padding: 3px 6px; text-align: center; }
+.big.compact .bar { margin: 6px 8px 2px; }
+.big.compact .batk { font-size: 11px; line-height: 1.3; padding: 0 8px; margin-top: 3px; }
+.big.compact > .batk:last-child, .big.compact .side .batk:last-child { padding-bottom: 6px; }
+
+/* コスト残数(💎のならび) */
+.gembar { gap: 8px; margin: 0 0 8px; padding: 4px 10px; font-size: 12px; }
+.gembar .gems { font-size: 17px; letter-spacing: 1px; }
+#menu-panel { padding: 12px; }
+#menu-panel .btn { margin: 6px 0; padding: 10px 8px; }
+
+/* ----- バトル画面は1画面に収める(スクロールしない) ----- */
+#screen-battle.active { height: 100dvh; padding: 6px; overflow: hidden; }
+#center { flex: 1 1 0; min-height: 34px; }

@@ -220,18 +220,20 @@ function cardHTML(c, extra, inField) {
     ${badges ? `<div class="badge">${badges}</div>` : ""}
     <div class="cname">${esc(c.name)}</div>
     ${barHTML(c, c.hp, max, "")}
-    <div class="hpbadge ${hpCls(c.hp, max)}">${Math.max(0, c.hp)}</div>
+    <div class="hpnum">${Math.max(0, c.hp)}</div>
     <div class="skills"><div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
     <div class="catk">②${skillShort(normSkill(c.a2), m)}</div></div>
     ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}</div>`;
 }
 
-// 大きいカード(タップしたときのメニューに表示)  mini=true なら、並べて見られる小さめ版
-function bigCardHTML(c, mini) {
-  const cls = "big" + (mini ? " mini" : "") + " " + ((c.type === "item" || c.type === "cost") ? "k-" + c.type : kindCls(c));
-  if (c.type === "item" || c.type === "cost") {
-    return `<div class="${cls}"><div class="bart">${c.icon}</div>
-      <div class="bname">${esc(c.name)}</div><div class="batk">${esc(c.desc)}</div></div>`;
+// 大きいカード(タップしたときのメニューに表示)  mini=true なら並べて見られる小さめ版、
+// compact=true なら「絵が左、くわしい情報が右」のよこ向き(メニュー用。画面に収まるように)
+function bigCardHTML(c, mini, compact) {
+  const isItem = c.type === "item" || c.type === "cost";
+  const cls = "big" + (mini ? " mini" : "") + (compact ? " compact" : "") + " " + (isItem ? "k-" + c.type : kindCls(c));
+  if (isItem) {
+    const body = `<div class="bname">${esc(c.name)}</div><div class="batk">${esc(c.desc)}</div>`;
+    return `<div class="${cls}"><div class="bart">${c.icon}</div>${compact ? `<div class="side">${body}</div>` : body}</div>`;
   }
   const max = c.maxHp || c.hp;
   const m = c.plush ? 2 : 1;
@@ -243,14 +245,13 @@ function bigCardHTML(c, mini) {
     power = `<div class="batk gold">⬆️パワーアップ(元:${esc(bn)} / 置き換え💎${c.upCost || 0})</div>`;
   }
   const under = c.under ? `<div class="batk">下のカード:${esc(c.under.name)}</div>` : "";
-  return `<div class="${cls}"><div class="bart">${artHTML(c)}</div>
-    <div class="hpbadge ${hpCls(c.hp, max)}">${Math.max(0, c.hp)}</div>
-    <div class="bname">${esc(c.name)}</div>
+  const body = `<div class="bname">${esc(c.name)}</div>
     ${barHTML({}, c.hp, max, "big")}
     ${power}${under}
     ${st ? `<div class="batk">${st}</div>` : ""}
     <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
-    <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div></div>`;
+    <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div>`;
+  return `<div class="${cls}"><div class="bart">${artHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}</div>`;
 }
 
 // ---------- ④ 画面切り替え ----------
@@ -1407,8 +1408,8 @@ function openMenu(opt) {
   panel.onclick = null;
   let h = "";
   // 自分のカードのメニューには、いま持っているコストを出す
-  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト <b>💎 ${G.player.cost}</b></div>`;
-  if (opt.card) h += bigCardHTML(opt.card);
+  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト ${gemsHTML(G.player.cost)}</div>`;
+  if (opt.card) h += bigCardHTML(opt.card, false, true);
   if (opt.title) h += `<h3>${esc(opt.title)}</h3>`;
   if (opt.msg) h += `<p class="msg">${esc(opt.msg)}</p>`;
   if (opt.note) h += `<p class="note">${esc(opt.note)}</p>`;
