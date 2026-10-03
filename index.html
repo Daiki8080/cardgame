@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -69,6 +69,24 @@
   <label>イラスト画像</label>
   <input type="file" id="f-img" accept="image/*">
   <div id="f-preview" class="preview">画像未選択</div>
+
+  <!-- 画像を選ぶと出る「トリミング」エリア -->
+  <div id="crop-area" class="hidden">
+    <p class="note">ゆびで動かして、大きさを変えて、カードに映す部分を決めましょう。(2本ゆびで拡大・縮小もできます)</p>
+    <div class="crop-row">
+      <div>
+        <div class="crop-cap">トリミング枠</div>
+        <div id="crop-box"><img id="crop-img" alt=""><div id="crop-hide">技の欄でかくれる</div></div>
+      </div>
+      <div>
+        <div class="crop-cap">完成イメージ</div>
+        <div id="crop-card"></div>
+      </div>
+    </div>
+    <label>大きさ</label>
+    <input type="range" id="crop-zoom" min="0" max="1000" value="0">
+    <button type="button" id="crop-reset" class="btn small">もとにもどす</button>
+  </div>
 
   <label>カード名</label>
   <input type="text" id="f-name" maxlength="12" placeholder="例:ねこ戦士">
@@ -181,6 +199,7 @@
 
 <!-- ===== キャラクター情報(【詳細】を押したとき) ===== -->
 <div id="detail"><div id="detail-panel">
+  <div id="detail-art"></div>
   <h3 id="detail-name"></h3>
   <div id="detail-text"></div>
   <button id="detail-close" class="btn small">閉じる</button>
@@ -203,6 +222,6 @@
   </div>
 </div>
 
-<script src="game.js?v=9"></script>
+<script src="game.js?v=10"></script>
 </body>
 </html>

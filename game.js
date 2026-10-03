@@ -194,9 +194,11 @@ function kindCls(c) {
 function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? "y" : "r"; }
 
 // キャラクター情報があるカードにだけ出す、小さな【詳細】ボタン(押すと情報が表示される)
+// (キャラクター情報か、トリミング前の元画像があるカードに出す)
+const hasDetail = c => !!(c.info || c.full);
 function detailBtn(c) {
-  if (!c.info) return "";
-  return `<button class="detail-btn" data-name="${esc(c.name)}" data-info="${esc(c.info)}">【詳細】</button>`;
+  if (!hasDetail(c)) return "";
+  return `<button class="detail-btn" data-src="${esc(c.srcId || c.id || "")}" data-name="${esc(c.name)}" data-info="${esc(c.info || "")}">【詳細】</button>`;
 }
 
 // 小さいカード(手札・場・デッキ編成で使う)  inField=true なら「行動ずみ」の暗い表示もする
@@ -257,14 +259,22 @@ function bigCardHTML(c, mini, compact) {
     ${st ? `<div class="batk">${st}</div>` : ""}
     <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
     <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div>`;
-  const hasInfo = c.info ? " has-info" : "";
+  const hasInfo = hasDetail(c) ? " has-info" : "";
   return `<div class="${cls}${hasInfo}"><div class="bart">${artHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
 }
 
 // ---------- キャラクター情報(【詳細】ボタン) ----------
-function showDetail(name, info) {
+function showDetail(name, info, srcId) {
+  // 大きく見せる画像は、トリミング前の元画像(なければカードの画像)
+  const src = loadCards().find(x => x.id === srcId);
+  let art = "";
+  if (src && (src.full || src.img)) art = `<img src="${src.full || src.img}" alt="">`;
+  else if (src && src.emoji) art = `<div class="emoji">${src.emoji}</div>`;
+  $("detail-art").innerHTML = art;
+  $("detail-art").style.display = art ? "" : "none";
   $("detail-name").textContent = name;
-  $("detail-text").textContent = info;
+  $("detail-text").textContent = info || "";
+  $("detail-text").style.display = info ? "" : "none";
   // 2人対戦で上の人のターンのときは、逆向きに出す
   const flip = !!G && isPvp() && G.turn === "cpu" && $("screen-battle").classList.contains("active");
   $("detail-panel").classList.toggle("flip", flip);
@@ -278,7 +288,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest ? e.target.closest(".detail-btn") : null;
   if (!b) return;
   e.stopPropagation();
-  showDetail(b.dataset.name, b.dataset.info);
+  showDetail(b.dataset.name, b.dataset.info, b.dataset.src);
 }, true);
 
 // ---------- ④ 画面切り替え ----------
@@ -378,7 +388,9 @@ function loadIntoForm(id) {
   $("f-info").value = c.info || "";
   setSkillForm("a1", c.a1);
   setSkillForm("a2", c.a2);
-  $("f-preview").innerHTML = c.img ? `<img src="${c.img}" alt="">` : `<div style="font-size:64px">${c.emoji || "❓"}</div>`;
+  currentFull = c.full || "";
+  if (c.img) cropStart(c.full || c.img, c.full ? c.crop : null, false);
+  else $("f-preview").innerHTML = `<div style="font-size:64px">${c.emoji || "❓"}</div>`;
   $("create-title").textContent = "カードを直す";
   $("btn-save-card").textContent = "変更を保存";
   $("btn-new-card").classList.remove("hidden");
@@ -409,29 +421,150 @@ function resetCreateForm() {
   $("f-kind").value = "normal";
   updateKindForm();
   $("f-img").value = "";
+  currentFull = "";
+  CROP.img = null; CROP.dirty = false;
+  $("crop-area").classList.add("hidden");
+  $("f-preview").classList.remove("hidden");
   $("f-preview").textContent = "画像未選択";
 }
 
-// 画像を選んだら、小さくして(300×300)プレビューに表示
+// ---------- 画像のトリミング ----------
+// CROP: 元画像(img)と、枠の中での画像の位置(x,y)と表示の横幅(w)。単位は「枠のpx」
+const CROP = { img: null, x: 0, y: 0, w: 0, dirty: false, minW: 0, maxW: 0 };
+let currentFull = "";   // トリミング前の元画像(【詳細】で大きく見せる)
+const CROP_OUT_W = 280, CROP_OUT_H = 400;   // カード用に切り出す大きさ(7:10)
+const cropBox = () => $("crop-box");
+const boxW = () => cropBox().clientWidth || 170;
+const boxH = () => cropBox().clientHeight || 243;
+const cropH = () => CROP.w * CROP.img.naturalHeight / CROP.img.naturalWidth;
+
+function cropClamp() {
+  const BW = boxW(), BH = boxH(), w = CROP.w, h = cropH();
+  CROP.x = w >= BW ? Math.min(0, Math.max(BW - w, CROP.x)) : Math.min(BW - w, Math.max(0, CROP.x));
+  CROP.y = h >= BH ? Math.min(0, Math.max(BH - h, CROP.y)) : Math.min(BH - h, Math.max(0, CROP.y));
+}
+function cropApply() {
+  cropClamp();
+  const im = $("crop-img");
+  im.style.width = CROP.w + "px"; im.style.height = cropH() + "px";
+  im.style.left = CROP.x + "px"; im.style.top = CROP.y + "px";
+  $("crop-zoom").value = Math.round((CROP.w - CROP.minW) / (CROP.maxW - CROP.minW) * 1000);
+  CROP.dirty = true;
+  cropPreviewSoon();
+}
+// 画像を読みこんで、さいしょの位置(枠いっぱいに表示)にする
+function cropStart(src, saved, markDirty) {
+  const img = new Image();
+  img.onload = () => {
+    CROP.img = img;
+    $("f-preview").classList.add("hidden");
+    $("crop-area").classList.remove("hidden");
+    $("crop-img").src = src;
+    const BW = boxW(), BH = boxH(), ratio = img.naturalWidth / img.naturalHeight;
+    const contain = Math.min(BW, BH * ratio), cover = Math.max(BW, BH * ratio);
+    CROP.minW = contain; CROP.maxW = cover * 4;
+    if (saved) { CROP.w = saved.w * BW; CROP.x = saved.x * BW; CROP.y = saved.y * BH; }
+    else { CROP.w = cover; CROP.x = (BW - cover) / 2; CROP.y = (BH - cover / ratio) / 2; }
+    cropApply();
+    CROP.dirty = !!markDirty;
+  };
+  img.src = src;
+}
+// 大きさを変える(枠の中心はそのまま)
+function cropSetW(nw) {
+  nw = Math.max(CROP.minW, Math.min(CROP.maxW, nw));
+  const BW = boxW(), BH = boxH(), h = cropH();
+  const cx = (BW / 2 - CROP.x) / CROP.w, cy = (BH / 2 - CROP.y) / h;
+  CROP.w = nw;
+  CROP.x = BW / 2 - cx * nw; CROP.y = BH / 2 - cy * cropH();
+  cropApply();
+}
+$("crop-zoom").addEventListener("input", () => {
+  if (CROP.img) cropSetW(CROP.minW + (CROP.maxW - CROP.minW) * $("crop-zoom").value / 1000);
+});
+$("crop-reset").onclick = () => {
+  if (!CROP.img) return;
+  const BW = boxW(), BH = boxH(), ratio = CROP.img.naturalWidth / CROP.img.naturalHeight, cover = Math.max(BW, BH * ratio);
+  CROP.w = cover; CROP.x = (BW - cover) / 2; CROP.y = (BH - cover / ratio) / 2;
+  cropApply();
+};
+// ゆびでドラッグ(1本=動かす / 2本=拡大縮小)
+const ptrs = new Map();
+let pinch0 = 0, pinchW0 = 0;
+cropBox().addEventListener("pointerdown", e => {
+  if (!CROP.img) return;
+  cropBox().setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; pinch0 = Math.hypot(p.x - q.x, p.y - q.y); pinchW0 = CROP.w; }
+  e.preventDefault();
+});
+cropBox().addEventListener("pointermove", e => {
+  const p = ptrs.get(e.pointerId);
+  if (!p) return;
+  if (ptrs.size === 1) {
+    CROP.x += e.clientX - p.x; CROP.y += e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    cropApply();
+  } else if (ptrs.size === 2) {
+    p.x = e.clientX; p.y = e.clientY;
+    const [a, b] = [...ptrs.values()];
+    if (pinch0 > 0) cropSetW(pinchW0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch0);
+  }
+});
+["pointerup", "pointercancel"].forEach(t => cropBox().addEventListener(t, e => { ptrs.delete(e.pointerId); pinch0 = 0; }));
+
+// 枠に見えている部分を、カード用の画像(280×400)に切り出す
+function cropRender() {
+  const k = CROP_OUT_W / boxW();
+  const cv = document.createElement("canvas");
+  cv.width = CROP_OUT_W; cv.height = CROP_OUT_H;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#dfe5ef"; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(CROP.img, CROP.x * k, CROP.y * k, CROP.w * k, cropH() * k);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
+// 元画像は、大きすぎないように縮めて保存(長いほうが700pxまで)
+function shrinkFull(img) {
+  const sc = Math.min(1, 700 / Math.max(img.naturalWidth, img.naturalHeight));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(img.naturalWidth * sc); cv.height = Math.round(img.naturalHeight * sc);
+  cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", 0.8);
+}
+
+// 「完成イメージ」: 入力ずみの内容で、本物のカードと同じ見た目を表示する
+let previewTimer = 0;
+function cropPreviewSoon() {
+  if (previewTimer) return;
+  previewTimer = requestAnimationFrame(() => { previewTimer = 0; cropPreview(); });
+}
+function cropPreview() {
+  if ($("crop-area").classList.contains("hidden")) return;
+  const sk = (p, d) => { const r = readSkill(p, ""); return typeof r === "string" ? d : r; };
+  const hp = parseInt($("f-hp").value, 10);
+  const c = {
+    uid: "", kind: $("f-kind").value, name: $("f-name").value.trim() || "カード名", hp: hp >= 1 ? hp : 100,
+    a1: sk("a1", { type: "attack", name: "", cost: 1, dmg: 20 }), a2: sk("a2", { type: "attack", name: "", cost: 2, dmg: 40 }),
+    img: cropRender()
+  };
+  $("crop-card").innerHTML = cardHTML(c);
+}
+// 名前・HP・技を入力しても、完成イメージが変わる
+$("screen-create").addEventListener("input", e => { if (e.target.id !== "crop-zoom") cropPreviewSoon(); });
+$("screen-create").addEventListener("change", e => { if (e.target.id !== "f-img") cropPreviewSoon(); });
+
+// 画像を選んだら、トリミングエリアに出す
 $("f-img").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const size = 300;
-      const canvas = document.createElement("canvas");
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      const scale = Math.max(size / img.width, size / img.height);
-      const w = img.width * scale, h = img.height * scale;
-      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size);
-      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      currentImg = canvas.toDataURL("image/jpeg", 0.85);
-      $("f-preview").innerHTML = `<img src="${currentImg}" alt="">`;
-    };
-    img.src = reader.result;
+    currentEmoji = "";
+    cropStart(reader.result, null, true);
+    // 元画像(縮小)を用意しておく
+    const im = new Image();
+    im.onload = () => { currentFull = shrinkFull(im); };
+    im.src = reader.result;
   };
   reader.readAsDataURL(file);
 });
@@ -459,7 +592,7 @@ $("btn-save-card").onclick = () => {
   const kind = $("f-kind").value;
   const name = $("f-name").value.trim();
   const hp = parseInt($("f-hp").value, 10);
-  if (!currentImg && !currentEmoji) return alert("イラスト画像を選んでください");
+  if (!CROP.img && !currentImg && !currentEmoji) return alert("イラスト画像を選んでください");
   if (!name) return alert("カード名を入力してください");
   if (!(hp >= 1)) return alert("HPは1以上の数字で入力してください");
   const a1 = readSkill("a1", "①");
@@ -468,7 +601,13 @@ $("btn-save-card").onclick = () => {
   if (typeof a2 === "string") return alert(a2);
 
   const card = { id: editCardId || ("c" + Date.now()), kind: kind, name: name, hp: hp, a1: a1, a2: a2 };
-  if (currentImg) card.img = currentImg; else card.emoji = currentEmoji;
+  if (CROP.img) {
+    // トリミングした画像を、カードの画像にする(いじっていない古いカードはそのまま)
+    if (CROP.dirty || !currentImg) currentImg = cropRender();
+    const BW = boxW(), BH = boxH();
+    card.img = currentImg;
+    if (currentFull) { card.full = currentFull; card.crop = { w: CROP.w / BW, x: CROP.x / BW, y: CROP.y / BH }; }
+  } else if (currentImg) card.img = currentImg; else card.emoji = currentEmoji;
   const info = $("f-info").value.trim();     // キャラクター情報(入力しなくてもOK)
   if (info) card.info = info;
   if (kind === "power") {
@@ -706,7 +845,7 @@ function makeChar(d) {
   }
   return { uid: ++uidCounter, type: "char", srcId: d.id || ("n:" + d.name),
     power: isPower(d), baseId: d.baseId || null, baseName: baseName, upCost: d.upCost || 0,
-    name: d.name, img: d.img || "", emoji: d.emoji || "", info: d.info || "",
+    name: d.name, img: d.img || "", emoji: d.emoji || "", info: d.info || "", full: d.full || "",
     maxHp: d.hp, hp: d.hp, a1: normSkill(d.a1), a2: normSkill(d.a2),
     acted: false, fresh: false, guard: false, amulet: false, plush: false, decoy: 0, under: null };
 }

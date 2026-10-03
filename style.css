@@ -780,3 +780,23 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 #detail-panel.flip { transform: rotate(180deg); }
 #detail-panel h3 { margin: 0 0 8px; text-align: center; font-size: 18px; }
 #detail-text { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.7; margin-bottom: 12px; color: var(--text); }
+
+/* ===== 画像のトリミング ===== */
+#crop-area { margin-top: 8px; }
+.crop-row { display: flex; gap: 12px; align-items: flex-start; }
+.crop-cap { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+#crop-box { position: relative; width: 170px; aspect-ratio: 7 / 10; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: repeating-conic-gradient(#3a3a44 0 25%, #2b2b33 0 50%) 0 0 / 16px 16px; border: 2px solid var(--accent); border-radius: 10px; }
+#crop-img { position: absolute; max-width: none; pointer-events: none; -webkit-user-drag: none; }
+#crop-hide { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;
+  background: linear-gradient(transparent, rgba(0,0,0,.55)); border-top: 1px dashed rgba(255,255,255,.8); color: #fff; font-size: 10px; pointer-events: none; }
+#crop-card { zoom: 1.5; }
+#crop-card .card { --cw: 76px; --ch: 106px; }
+#crop-zoom { width: 100%; padding: 0; }
+#crop-reset { margin-top: 8px; }
+
+/* ===== 【詳細】: 元画像を大きく + 下にキャラ情報 ===== */
+#detail-panel { width: 92%; max-width: 400px; max-height: 92dvh; text-align: center; }
+#detail-art img { display: block; width: auto; max-width: 100%; max-height: 52dvh; margin: 0 auto 10px; border-radius: 10px; border: 2px solid var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.6); }
+#detail-art .emoji { font-size: 120px; line-height: 1.1; margin-bottom: 8px; }
+#detail-text { text-align: left; }
