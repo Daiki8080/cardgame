@@ -297,15 +297,23 @@ function showDetail(c) {
     skill("①", c.a1) + skill("②", c.a2);
   const info = c.info || "";
   $("detail-text").textContent = info;
-  $("detail-text").style.display = info ? "" : "none";
+  $("detail-info").style.display = info ? "" : "none";
+  $("detail-hint").textContent = info ? "▼ 下にスクロールすると、キャラクター情報" : "";
+  $("detail-stage").classList.remove("hide-over");
   // 2人対戦で上の人のターンのときは、逆向きに出す
   const flip = !!G && isPvp() && G.turn === "cpu" && $("screen-battle").classList.contains("active");
-  $("detail-panel").classList.toggle("flip", flip);
+  $("detail").classList.toggle("flip", flip);
   $("detail").classList.add("open");
+  $("detail").scrollTop = 0;
 }
 function closeDetail() { $("detail").classList.remove("open"); }
 $("detail-close").onclick = closeDetail;
-$("detail").addEventListener("click", e => { if (e.target.id === "detail") closeDetail(); });
+$("detail-close2").onclick = closeDetail;
+// 画像をタップすると、重ねて出している文字が消える(もう1回タップで元にもどる)
+$("detail-stage").addEventListener("click", e => {
+  if (e.target.closest("#detail-close")) return;
+  $("detail-stage").classList.toggle("hide-over");
+});
 // 【詳細】ボタンは、カードをえらぶ操作より先に反応させる(カードがえらばれたりしないように)
 document.addEventListener("click", e => {
   const b = e.target.closest ? e.target.closest(".detail-btn") : null;
