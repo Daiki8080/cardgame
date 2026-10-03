@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -75,6 +75,10 @@
 
   <label>HP</label>
   <input type="number" id="f-hp" inputmode="numeric" min="1" placeholder="例:80">
+
+  <label>キャラクター情報(なくてもOK)</label>
+  <textarea id="f-info" rows="4" maxlength="400" placeholder="例:森に住む猫の剣士。小さいけれど、とても勇敢。"></textarea>
+  <p class="note">入力すると、デッキ編成やバトル中のカードに【詳細】ボタンが出て、この文章を読めます。</p>
 
   <!-- 技① -->
   <h3>技①</h3>
@@ -175,6 +179,13 @@
 <!-- ===== メニュー(カードをタップしたとき) ===== -->
 <div id="menu"><div id="menu-panel"></div></div>
 
+<!-- ===== キャラクター情報(【詳細】を押したとき) ===== -->
+<div id="detail"><div id="detail-panel">
+  <h3 id="detail-name"></h3>
+  <div id="detail-text"></div>
+  <button id="detail-close" class="btn small">閉じる</button>
+</div></div>
+
 <!-- ===== コイントス(バトル開始のとき) ===== -->
 <div id="coin-overlay" class="hidden">
   <div class="coin-box">
@@ -192,6 +203,6 @@
   </div>
 </div>
 
-<script src="game.js?v=8"></script>
+<script src="game.js?v=9"></script>
 </body>
 </html>

@@ -193,6 +193,12 @@ function kindCls(c) {
 }
 function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? "y" : "r"; }
 
+// キャラクター情報があるカードにだけ出す、小さな【詳細】ボタン(押すと情報が表示される)
+function detailBtn(c) {
+  if (!c.info) return "";
+  return `<button class="detail-btn" data-name="${esc(c.name)}" data-info="${esc(c.info)}">【詳細】</button>`;
+}
+
 // 小さいカード(手札・場・デッキ編成で使う)  inField=true なら「行動ずみ」の暗い表示もする
 function cardHTML(c, extra, inField) {
   extra = extra || "";
@@ -251,8 +257,29 @@ function bigCardHTML(c, mini, compact) {
     ${st ? `<div class="batk">${st}</div>` : ""}
     <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
     <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div>`;
-  return `<div class="${cls}"><div class="bart">${artHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}</div>`;
+  const hasInfo = c.info ? " has-info" : "";
+  return `<div class="${cls}${hasInfo}"><div class="bart">${artHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
 }
+
+// ---------- キャラクター情報(【詳細】ボタン) ----------
+function showDetail(name, info) {
+  $("detail-name").textContent = name;
+  $("detail-text").textContent = info;
+  // 2人対戦で上の人のターンのときは、逆向きに出す
+  const flip = !!G && isPvp() && G.turn === "cpu" && $("screen-battle").classList.contains("active");
+  $("detail-panel").classList.toggle("flip", flip);
+  $("detail").classList.add("open");
+}
+function closeDetail() { $("detail").classList.remove("open"); }
+$("detail-close").onclick = closeDetail;
+$("detail").addEventListener("click", e => { if (e.target.id === "detail") closeDetail(); });
+// 【詳細】ボタンは、カードをえらぶ操作より先に反応させる(カードがえらばれたりしないように)
+document.addEventListener("click", e => {
+  const b = e.target.closest ? e.target.closest(".detail-btn") : null;
+  if (!b) return;
+  e.stopPropagation();
+  showDetail(b.dataset.name, b.dataset.info);
+}, true);
 
 // ---------- ④ 画面切り替え ----------
 function show(name) {
@@ -348,6 +375,7 @@ function loadIntoForm(id) {
   if (isPower(c)) { $("f-base").value = c.baseId; $("f-upcost").value = c.upCost; }
   $("f-name").value = c.name;
   $("f-hp").value = c.hp;
+  $("f-info").value = c.info || "";
   setSkillForm("a1", c.a1);
   setSkillForm("a2", c.a2);
   $("f-preview").innerHTML = c.img ? `<img src="${c.img}" alt="">` : `<div style="font-size:64px">${c.emoji || "❓"}</div>`;
@@ -372,7 +400,7 @@ function resetCreateForm() {
   $("btn-new-card").classList.add("hidden");
   fillEditList();
   currentImg = "";
-  ["f-name", "f-hp", "f-upcost"].forEach(id => $(id).value = "");
+  ["f-name", "f-hp", "f-upcost", "f-info"].forEach(id => $(id).value = "");
   ["a1", "a2"].forEach(p => {
     $("f-" + p + "type").value = "attack";
     ["name", "cost", "v1", "v2"].forEach(k => $("f-" + p + k).value = "");
@@ -441,6 +469,8 @@ $("btn-save-card").onclick = () => {
 
   const card = { id: editCardId || ("c" + Date.now()), kind: kind, name: name, hp: hp, a1: a1, a2: a2 };
   if (currentImg) card.img = currentImg; else card.emoji = currentEmoji;
+  const info = $("f-info").value.trim();     // キャラクター情報(入力しなくてもOK)
+  if (info) card.info = info;
   if (kind === "power") {
     const baseId = $("f-base").value;
     const upCost = parseInt($("f-upcost").value, 10);
@@ -518,7 +548,7 @@ function drawDeckList() {
   }
   const item = (c, cap) => {
     const sel = deckSel.includes(c.id) ? " selected" : "";
-    return `<div class="deck-item" data-id="${c.id}">${cardHTML(c, sel)}${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="del" data-del="${c.id}">削除</button></div></div>`;
+    return `<div class="deck-item" data-id="${c.id}"><div class="cardwrap">${cardHTML(c, sel)}${detailBtn(c)}</div>${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="del" data-del="${c.id}">削除</button></div></div>`;
   };
   let h = "<h3>通常カード</h3>";
   h += normals.length ? `<div class="grid">${normals.map(c => item(c, "")).join("")}</div>` : '<p class="note">通常カードがありません。</p>';
@@ -676,7 +706,7 @@ function makeChar(d) {
   }
   return { uid: ++uidCounter, type: "char", srcId: d.id || ("n:" + d.name),
     power: isPower(d), baseId: d.baseId || null, baseName: baseName, upCost: d.upCost || 0,
-    name: d.name, img: d.img || "", emoji: d.emoji || "",
+    name: d.name, img: d.img || "", emoji: d.emoji || "", info: d.info || "",
     maxHp: d.hp, hp: d.hp, a1: normSkill(d.a1), a2: normSkill(d.a2),
     acted: false, fresh: false, guard: false, amulet: false, plush: false, decoy: 0, under: null };
 }
