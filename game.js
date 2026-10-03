@@ -186,12 +186,19 @@ function skillDetail(sk, m) {
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
+// リボンの色(技①の種類で決まる。パワーアップは金色)と、HPバッジの色
+function kindCls(c) {
+  if (c.power || isPower(c)) return "k-power";
+  return "k-" + normSkill(c.a1).type;
+}
+function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? "y" : "r"; }
+
 // 小さいカード(手札・場・デッキ編成で使う)  inField=true なら「行動ずみ」の暗い表示もする
 function cardHTML(c, extra, inField) {
   extra = extra || "";
   const targetable = T && T.valid.includes(c.uid) ? " targetable" : "";
   if (c.type === "item" || c.type === "cost") {
-    return `<div class="card ${c.type}${targetable}${extra}" data-uid="${c.uid}">
+    return `<div class="card ${c.type} k-${c.type}${targetable}${extra}" data-uid="${c.uid}">
       <div class="art"><div class="icon">${c.icon}</div></div>
       <div class="cname">${esc(c.name)}</div>
       <div class="desc">${esc(c.short)}</div></div>`;
@@ -199,7 +206,7 @@ function cardHTML(c, extra, inField) {
   const max = c.maxHp || c.hp;
   const m = c.plush ? 2 : 1;   // ぬいぐるみ中は、コストもダメージも2倍で表示
   const pw = c.power || isPower(c);
-  let cls = "card char";
+  let cls = "card char " + kindCls(c);
   if (inField && c.acted) cls += " done";
   if (pw) cls += " power";
   if (c.guard) cls += " guard";
@@ -213,14 +220,15 @@ function cardHTML(c, extra, inField) {
     ${badges ? `<div class="badge">${badges}</div>` : ""}
     <div class="cname">${esc(c.name)}</div>
     ${barHTML(c, c.hp, max, "")}
-    <div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
-    <div class="catk">②${skillShort(normSkill(c.a2), m)}</div>
+    <div class="hpbadge ${hpCls(c.hp, max)}">${Math.max(0, c.hp)}</div>
+    <div class="skills"><div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
+    <div class="catk">②${skillShort(normSkill(c.a2), m)}</div></div>
     ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}</div>`;
 }
 
 // 大きいカード(タップしたときのメニューに表示)  mini=true なら、並べて見られる小さめ版
 function bigCardHTML(c, mini) {
-  const cls = "big" + (mini ? " mini" : "");
+  const cls = "big" + (mini ? " mini" : "") + " " + ((c.type === "item" || c.type === "cost") ? "k-" + c.type : kindCls(c));
   if (c.type === "item" || c.type === "cost") {
     return `<div class="${cls}"><div class="bart">${c.icon}</div>
       <div class="bname">${esc(c.name)}</div><div class="batk">${esc(c.desc)}</div></div>`;
@@ -236,6 +244,7 @@ function bigCardHTML(c, mini) {
   }
   const under = c.under ? `<div class="batk">下のカード:${esc(c.under.name)}</div>` : "";
   return `<div class="${cls}"><div class="bart">${artHTML(c)}</div>
+    <div class="hpbadge ${hpCls(c.hp, max)}">${Math.max(0, c.hp)}</div>
     <div class="bname">${esc(c.name)}</div>
     ${barHTML({}, c.hp, max, "big")}
     ${power}${under}
@@ -302,7 +311,65 @@ function updateKindForm() {
 }
 $("f-kind").addEventListener("change", updateKindForm);
 
+let editCardId = null;   // 直しているカードの番号(新しく作るときは null)
+let currentEmoji = "";   // サンプルカード(絵文字)を直すとき用
+
+// 「つくったカードを直す」の選択肢を作る
+function fillEditList() {
+  const cards = loadCards();
+  $("f-edit").innerHTML = '<option value="">(新しいカードを作る)</option>' +
+    cards.map(c => `<option value="${c.id}">${isPower(c) ? "⬆ " : ""}${esc(c.name)}</option>`).join("");
+  $("f-edit").value = editCardId || "";
+}
+
+// 技を入力欄にセット
+function setSkillForm(p, sk) {
+  sk = normSkill(sk);
+  $("f-" + p + "type").value = sk.type;
+  $("f-" + p + "name").value = sk.name;
+  $("f-" + p + "cost").value = sk.cost;
+  $("f-" + p + "v1").value = sk.type === "heal" ? sk.heal : sk.dmg;
+  $("f-" + p + "v2").value = sk.type === "sacrifice" ? sk.self : sk.type === "chance" ? sk.pct : "";
+  updateSkillForm(p);
+}
+
+// 作ったカードの内容を入力欄に入れて、直せるようにする
+function loadIntoForm(id) {
+  const c = loadCards().find(x => x.id === id);
+  if (!c) return;
+  resetCreateForm();
+  editCardId = id;
+  currentImg = c.img || "";
+  currentEmoji = c.emoji || "";
+  $("f-kind").value = isPower(c) ? "power" : "normal";
+  $("f-kind").disabled = true;           // 種類は変えられない
+  updateKindForm();
+  if (isPower(c)) { $("f-base").value = c.baseId; $("f-upcost").value = c.upCost; }
+  $("f-name").value = c.name;
+  $("f-hp").value = c.hp;
+  setSkillForm("a1", c.a1);
+  setSkillForm("a2", c.a2);
+  $("f-preview").innerHTML = c.img ? `<img src="${c.img}" alt="">` : `<div style="font-size:64px">${c.emoji || "❓"}</div>`;
+  $("create-title").textContent = "カードを直す";
+  $("btn-save-card").textContent = "変更を保存";
+  $("btn-new-card").classList.remove("hidden");
+  fillEditList();
+  window.scrollTo(0, 0);
+}
+$("f-edit").addEventListener("change", () => {
+  const id = $("f-edit").value;
+  if (id) loadIntoForm(id); else resetCreateForm();
+});
+$("btn-new-card").onclick = () => resetCreateForm();
+
 function resetCreateForm() {
+  editCardId = null;
+  currentEmoji = "";
+  $("f-kind").disabled = false;
+  $("create-title").textContent = "カード作成";
+  $("btn-save-card").textContent = "保存";
+  $("btn-new-card").classList.add("hidden");
+  fillEditList();
   currentImg = "";
   ["f-name", "f-hp", "f-upcost"].forEach(id => $(id).value = "");
   ["a1", "a2"].forEach(p => {
@@ -363,7 +430,7 @@ $("btn-save-card").onclick = () => {
   const kind = $("f-kind").value;
   const name = $("f-name").value.trim();
   const hp = parseInt($("f-hp").value, 10);
-  if (!currentImg) return alert("イラスト画像を選んでください");
+  if (!currentImg && !currentEmoji) return alert("イラスト画像を選んでください");
   if (!name) return alert("カード名を入力してください");
   if (!(hp >= 1)) return alert("HPは1以上の数字で入力してください");
   const a1 = readSkill("a1", "①");
@@ -371,7 +438,8 @@ $("btn-save-card").onclick = () => {
   const a2 = readSkill("a2", "②");
   if (typeof a2 === "string") return alert(a2);
 
-  const card = { id: "c" + Date.now(), kind: kind, name: name, img: currentImg, hp: hp, a1: a1, a2: a2 };
+  const card = { id: editCardId || ("c" + Date.now()), kind: kind, name: name, hp: hp, a1: a1, a2: a2 };
+  if (currentImg) card.img = currentImg; else card.emoji = currentEmoji;
   if (kind === "power") {
     const baseId = $("f-base").value;
     const upCost = parseInt($("f-upcost").value, 10);
@@ -381,9 +449,10 @@ $("btn-save-card").onclick = () => {
     card.upCost = upCost;
   }
   const cards = loadCards();
-  cards.push(card);
+  const at = editCardId ? cards.findIndex(c => c.id === editCardId) : -1;
+  if (at >= 0) cards[at] = card; else cards.push(card);
   if (!saveCards(cards)) return;
-  alert("カードを保存しました!");
+  alert(at >= 0 ? "カードを更新しました!" : "カードを保存しました!");
   resetCreateForm();
 };
 
@@ -448,7 +517,7 @@ function drawDeckList() {
   }
   const item = (c, cap) => {
     const sel = deckSel.includes(c.id) ? " selected" : "";
-    return `<div class="deck-item" data-id="${c.id}">${cardHTML(c, sel)}${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<button class="del" data-del="${c.id}">削除</button></div>`;
+    return `<div class="deck-item" data-id="${c.id}">${cardHTML(c, sel)}${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="del" data-del="${c.id}">削除</button></div></div>`;
   };
   let h = "<h3>通常カード</h3>";
   h += normals.length ? `<div class="grid">${normals.map(c => item(c, "")).join("")}</div>` : '<p class="note">通常カードがありません。</p>';
@@ -479,10 +548,8 @@ function toggleCard(id) {
     const base = cards.find(x => x.id === c.baseId && !isPower(x));
     if (!base) return alert("このパワーアップカードの、元の通常カードがありません。");
     if (countSel(true) >= MAX_POWER) return alert(`パワーアップカードは${MAX_POWER}枚までです。`);
-    if (!deckSel.includes(base.id)) {
-      if (countSel(false) >= DECK_CHAR) return alert("通常カードがもう10枚です。先にほかの通常カードを外してください。");
-      deckSel.push(base.id);   // 元の通常カードと合わせて1枚の扱い
-    }
+    // 元の通常カードをえらんでいないと、パワーアップカードはえらべない
+    if (!deckSel.includes(base.id)) return alert(`先に、元の通常カード「${base.name}」をえらんでください。`);
     deckSel.push(id);
   } else {
     if (countSel(false) >= DECK_CHAR) return alert("通常カードは10枚までです。");
@@ -491,6 +558,8 @@ function toggleCard(id) {
 }
 
 $("deck-list").addEventListener("click", e => {
+  const editCid = e.target.dataset.editcard;
+  if (editCid) { show("create"); loadIntoForm(editCid); return; }
   const delId = e.target.dataset.del;
   if (delId) {
     if (!confirm("このカードを削除しますか?(入っているデッキから外れます)")) return;
@@ -557,7 +626,13 @@ $("btn-battle").onclick = () => {
 };
 
 // ---------- ⑧ バトルのルール ----------
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// battleSeq は「何回目のバトルか」の番号。バトルをやめると番号が増えて、
+// 古いバトルの待ち時間(sleep)はそのまま止まる(= 古いバトルの続きが動かない)
+let battleSeq = 0;
+function sleep(ms) {
+  const seq = battleSeq;
+  return new Promise(r => setTimeout(() => { if (seq === battleSeq) r(); }, ms));
+}
 function wait(ms) { return sleep(ms * SPEED); }   // 「間」をあける。SPEEDで全体の速さが変わる
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
@@ -628,6 +703,7 @@ function buildSide(charDatas) {
 }
 
 async function startBattle() {
+  battleSeq++;                       // 前のバトルが動いていたら止める
   const sel = loadSel();
   const decks = loadDecks();
   const pd = decks.find(d => d.id === sel.p);
@@ -653,22 +729,31 @@ async function startBattle() {
   else await cpuTurn();
 }
 
-// コイントス(表ならあなたが先攻、裏ならCPUが先攻)
+// コイントス(FIRSTならあなたが先攻、SECONDならCPUが先攻)。さっと終わる
 async function coinToss() {
-  const heads = Math.random() < 0.5;
-  const ov = $("coin-overlay"), coin = $("coin");
-  $("coin-text").textContent = "コイントス!(表ならあなたが先攻)";
+  const first = Math.random() < 0.5;
+  const ov = $("coin-overlay"), wrap = $("coin-wrap"), coin = $("coin");
+  $("coin-text").textContent = "";
+  $("coin-text").className = "";
+  $("coin-sub").textContent = "";
+  ov.classList.remove("hidden", "landed");
+  // いったん最初の状態にもどす
+  wrap.classList.remove("toss");
   coin.style.transition = "none";
-  coin.style.transform = "rotateY(0deg)";
-  ov.classList.remove("hidden");
+  coin.style.transform = "rotateX(0deg)";
   void coin.offsetWidth;
-  coin.style.transition = "transform 2s cubic-bezier(.2,.7,.3,1)";
-  coin.style.transform = "rotateY(" + (heads ? 1800 : 1980) + "deg)";   // 1800度で表、1980度で裏が上になる
-  await sleep(2200);
-  $("coin-text").textContent = heads ? "表!  あなたの先攻です" : "裏!  CPUの先攻です";
-  await sleep(1700);
+  // 空中でくるくる回って、FIRST(1440度)かSECOND(1620度)の面が上になる
+  wrap.classList.add("toss");
+  coin.style.transition = "transform .95s cubic-bezier(.2,.6,.3,1)";
+  coin.style.transform = "rotateX(" + (first ? 1440 : 1620) + "deg)";
+  await sleep(1000);
+  ov.classList.add("landed");
+  $("coin-text").textContent = first ? "FIRST" : "SECOND";
+  $("coin-text").className = "show";
+  $("coin-sub").textContent = first ? "あなたの先攻!" : "CPUの先攻!";
+  await sleep(750);
   ov.classList.add("hidden");
-  return heads ? "player" : "cpu";
+  return first ? "player" : "cpu";
 }
 
 // ターンの最初にやること(ドロー → 💎獲得 → 防御・お守り・出したばかりの解除 → 行動できるように)
@@ -1321,6 +1406,8 @@ function openMenu(opt) {
   const panel = $("menu-panel");
   panel.onclick = null;
   let h = "";
+  // 自分のカードのメニューには、いま持っているコストを出す
+  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト <b>💎 ${G.player.cost}</b></div>`;
   if (opt.card) h += bigCardHTML(opt.card);
   if (opt.title) h += `<h3>${esc(opt.title)}</h3>`;
   if (opt.msg) h += `<p class="msg">${esc(opt.msg)}</p>`;
@@ -1517,7 +1604,7 @@ $("screen-battle").addEventListener("click", e => {
     if (ch) fieldMenu(ch);
   } else if (zone === "c-field") {
     const ch = G.cpu.field.find(c => c.uid === uid);
-    if (ch) openMenu({ card: ch });   // 相手のカードは情報を見るだけ
+    if (ch) openMenu({ card: ch, noGems: true });   // 相手のカードは情報を見るだけ
   }
 });
 
@@ -1526,7 +1613,8 @@ function endTurn() {
   G.busy = true;
   addLog("あなたはターンを終了した");
   render();
-  setTimeout(cpuTurn, 600 * SPEED);
+  const seq = battleSeq;
+  setTimeout(() => { if (seq === battleSeq) cpuTurn(); }, 600 * SPEED);
 }
 $("btn-end").onclick = () => {
   if (!G || G.busy || G.over || G.turn !== "player" || T) return;
@@ -1541,8 +1629,17 @@ $("btn-end").onclick = () => {
   endTurn();
 };
 $("btn-quit").onclick = () => {
-  if (G && G.busy) return alert("CPUのターンが終わってからやめてください。");
-  if (confirm("バトルをやめてタイトルに戻りますか?")) { G.over = true; T = null; show("title"); }
+  // CPUのターン中でもやめられる
+  if (confirm("バトルをやめてタイトルに戻りますか?")) {
+    battleSeq++;                      // 動いている古いバトルを止める
+    if (G) G.over = true;
+    T = null;
+    closeMenu();
+    $("coin-overlay").classList.add("hidden");
+    show("title");
+  }
 };
+
+document.body.dataset.theme = "royal";   // デザインは ROYAL(ネイビー × ゴールド)
 
 updateTitle();

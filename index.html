@@ -4,18 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>イラストカードバトル</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
 <!-- ===== タイトル画面 ===== -->
 <section id="screen-title" class="screen active">
   <div class="center-box">
-    <h1>🃏 イラストカードバトル</h1>
+    <div class="logo-sub">ILLUSTRATED</div>
+    <h1 class="logo">CARD BATTLE</h1>
+    <div class="logo-line"></div>
+    <p class="note" style="margin-top:-6px">イラストカードバトル</p>
     <p id="title-info" class="note"></p>
     <button id="btn-start" class="btn">ゲーム開始</button>
     <button id="btn-create" class="btn">カード作成</button>
     <button id="btn-deck" class="btn">デッキ編成</button>
+
+
   </div>
 </section>
 
@@ -33,7 +41,10 @@
 
 <!-- ===== カード作成画面 ===== -->
 <section id="screen-create" class="screen">
-  <h2>カード作成</h2>
+  <h2 id="create-title">カード作成</h2>
+
+  <label>つくったカードを直す</label>
+  <select id="f-edit"><option value="">(新しいカードを作る)</option></select>
 
   <label>カードの種類</label>
   <select id="f-kind">
@@ -97,6 +108,7 @@
   <div id="w-a2v2" class="hidden"><label id="l-a2v2"></label><input type="number" id="f-a2v2" inputmode="numeric" min="0" placeholder="数字"></div>
 
   <button id="btn-save-card" class="btn">保存</button>
+  <button id="btn-new-card" class="btn ghost hidden">新しいカードを作る(編集をやめる)</button>
   <button class="btn ghost" data-go="title">タイトルへ戻る</button>
 </section>
 
@@ -160,14 +172,20 @@
 <!-- ===== コイントス(バトル開始のとき) ===== -->
 <div id="coin-overlay" class="hidden">
   <div class="coin-box">
-    <div id="coin" class="coin">
-      <div class="face f">表</div>
-      <div class="face b">裏</div>
+    <div id="coin-label">COIN TOSS</div>
+    <div class="coin-stage">
+      <div id="coin-wrap" class="coin-wrap">
+        <div id="coin" class="coin">
+          <div class="face f">FIRST</div>
+          <div class="face b">SECOND</div>
+        </div>
+      </div>
     </div>
-    <div id="coin-text">コイントス!</div>
+    <div id="coin-text"></div>
+    <div id="coin-sub"></div>
   </div>
 </div>
 
-<script src="game.js?v=3"></script>
+<script src="game.js?v=5"></script>
 </body>
 </html>
