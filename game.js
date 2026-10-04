@@ -458,10 +458,67 @@ let editCardId = null;   // 直しているカードの番号(新しく作ると
 let currentEmoji = "";   // サンプルカード(絵文字)を直すとき用
 
 // 「つくったカードを直す」の選択肢を作る
+// ----- フォルダ(カードをまとめる) -----
+// カードごとに folder(フォルダ名)を持つ。まだカードが入っていないフォルダも消えないように、名前の一覧も保存する
+function loadFolderNames() {
+  try { return JSON.parse(localStorage.getItem("cb_folders")) || []; } catch (e) { return []; }
+}
+function saveFolderNames(list) {
+  try { localStorage.setItem("cb_folders", JSON.stringify(list)); } catch (e) { /* なくてもOK */ }
+}
+function allFolders() {
+  const set = new Set(loadFolderNames());
+  loadCards().forEach(c => { if (c.folder) set.add(c.folder); });
+  return [...set];
+}
+let lastFolder = "";   // 新しいカードは、前に使ったフォルダに入れる
+function fillFolderSelect(value) {
+  const list = allFolders();
+  $("f-folder").innerHTML = '<option value="">(フォルダなし)</option>' +
+    list.map(f => `<option value="${esc(f)}">📁 ${esc(f)}</option>`).join("");
+  $("f-folder").value = list.includes(value) ? value : "";
+  $("btn-folder-rename").disabled = !$("f-folder").value;
+}
+$("f-folder").addEventListener("change", () => { $("btn-folder-rename").disabled = !$("f-folder").value; });
+$("btn-folder-new").onclick = () => {
+  const name = (prompt("新しいフォルダの名前を入れてください") || "").trim().slice(0, 16);
+  if (!name) return;
+  const names = loadFolderNames();
+  if (!names.includes(name)) { names.push(name); saveFolderNames(names); }
+  fillFolderSelect(name);
+};
+// フォルダの名前を変える(中のカードも全部いっしょに変わる)。空にすると、フォルダを消す(カードは「フォルダなし」になる)
+$("btn-folder-rename").onclick = () => {
+  const old = $("f-folder").value;
+  if (!old) return;
+  const input = prompt(`「${old}」の新しい名前を入れてください。\n(空にして決定すると、フォルダを消します。カードは消えません)`, old);
+  if (input === null) return;
+  const name = input.trim().slice(0, 16);
+  if (name === old) return;
+  if (!name && !confirm(`フォルダ「${old}」を消しますか?(中のカードは「フォルダなし」になります)`)) return;
+  const cards = loadCards();
+  cards.forEach(c => { if (c.folder === old) { if (name) c.folder = name; else delete c.folder; } });
+  if (!saveCards(cards)) return;
+  const names = loadFolderNames().filter(f => f !== old);
+  if (name && !names.includes(name)) names.push(name);
+  saveFolderNames(names);
+  if (lastFolder === old) lastFolder = name;
+  fillFolderSelect(name);
+  fillEditList();
+};
+
+// 「つくったカードを直す」の選択肢を作る(フォルダごとに分けて表示)
 function fillEditList() {
   const cards = loadCards();
-  $("f-edit").innerHTML = '<option value="">(新しいカードを作る)</option>' +
-    cards.map(c => `<option value="${c.id}">${isPower(c) ? "⬆ " : ""}${esc(c.name)}</option>`).join("");
+  const opt = c => `<option value="${c.id}">${isPower(c) ? "⬆ " : ""}${esc(c.name)}</option>`;
+  let h = '<option value="">(新しいカードを作る)</option>';
+  allFolders().forEach(f => {
+    const inF = cards.filter(c => c.folder === f);
+    if (inF.length) h += `<optgroup label="📁 ${esc(f)}(${inF.length}枚)">${inF.map(opt).join("")}</optgroup>`;
+  });
+  const none = cards.filter(c => !c.folder);
+  if (none.length) h += `<optgroup label="フォルダなし(${none.length}枚)">${none.map(opt).join("")}</optgroup>`;
+  $("f-edit").innerHTML = h;
   $("f-edit").value = editCardId || "";
 }
 
@@ -491,6 +548,7 @@ function loadIntoForm(id) {
   $("f-name").value = c.name;
   $("f-hp").value = c.hp;
   $("f-info").value = c.info || "";
+  fillFolderSelect(c.folder || "");
   setSkillForm("a1", c.a1);
   setSkillForm("a2", c.a2);
   currentFull = c.full || "";
@@ -518,6 +576,7 @@ function resetCreateForm() {
   fillEditList();
   currentImg = "";
   ["f-name", "f-hp", "f-upcost", "f-info"].forEach(id => $(id).value = "");
+  fillFolderSelect(lastFolder);
   ["a1", "a2"].forEach(p => {
     $("f-" + p + "type").value = "attack";
     ["name", "cost", "v1", "v2"].forEach(k => $("f-" + p + k).value = "");
@@ -715,6 +774,8 @@ $("btn-save-card").onclick = () => {
   } else if (currentImg) card.img = currentImg; else card.emoji = currentEmoji;
   const info = $("f-info").value.trim();     // キャラクター情報(入力しなくてもOK)
   if (info) card.info = info;
+  const folder = $("f-folder").value;        // フォルダ(なくてもOK)
+  if (folder) card.folder = folder;
   if (kind === "power") {
     const baseId = $("f-base").value;
     const upCost = parseInt($("f-upcost").value, 10);
@@ -727,6 +788,7 @@ $("btn-save-card").onclick = () => {
   const at = editCardId ? cards.findIndex(c => c.id === editCardId) : -1;
   if (at >= 0) cards[at] = card; else cards.push(card);
   if (!saveCards(cards)) return;
+  if (at < 0) lastFolder = folder;
   alert(at >= 0 ? "カードを更新しました!" : "カードを保存しました!");
   resetCreateForm();
 };
@@ -2199,7 +2261,7 @@ $("btn-backup").onclick = () => show("backup");
 
 $("btn-export").onclick = async () => {
   const data = { app: "illust-card-battle", version: 1, date: new Date().toISOString(),
-    cards: loadCards(), decks: loadDecks(), sel: loadSel(), story: loadStory() };
+    cards: loadCards(), decks: loadDecks(), sel: loadSel(), story: loadStory(), folders: loadFolderNames() };
   const d = new Date();
   const p2 = n => String(n).padStart(2, "0");
   const name = `cardbattle-backup-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.json`;
@@ -2253,6 +2315,7 @@ function mergeById(now, add) {
 }
 function finishImport(cards, decks, sel, story) {
   if (!saveCards(cards)) return;
+  if (importData && Array.isArray(importData.folders)) saveFolderNames([...new Set(loadFolderNames().concat(importData.folders))]);
   saveDecks(decks);
   if (sel) saveSel(sel);
   if (story) { try { localStorage.setItem("cb_story", JSON.stringify(story)); } catch (e) { /* なくてもOK */ } }

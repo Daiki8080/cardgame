@@ -888,3 +888,8 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 /* バックアップ */
 #import-info { font-size: 14px; line-height: 1.5; margin: 10px 0 4px; }
 #screen-backup h3 { margin: 22px 0 4px; }
+
+/* カード作成:フォルダのえらび方 */
+.folder-row { display: flex; gap: 6px; align-items: stretch; }
+.folder-row select { flex: 1; min-width: 0; }
+.folder-row .btn.small { width: auto; flex: none; padding: 8px 10px; font-size: 13px; white-space: nowrap; }
