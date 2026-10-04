@@ -32,11 +32,13 @@ const STORY_CHARS = {
     "通常": "ikuhisa_normal.png", "笑顔": "ikuhisa_smile.png", "苦しい": "ikuhisa_pain.png",
     icon: { "通常": "ikuhisa_face_normal.jpg", "笑顔": "ikuhisa_face_smile.jpg", "苦しい": "ikuhisa_face_pain.jpg" },
   },
+  "ぽあろ": { "通常": "poaro_normal.png?v=2", "笑顔": "poaro_smile.png?v=2", "苦しい": "poaro_pain.png?v=2" },
   "ドラゴン使い": {
     "通常": "IMG_8253.jpeg", frame: true,
     icon: { "通常": "IMG_8254.jpeg" },
   },
 };
+STORY_CHARS["ぽあろくん"] = STORY_CHARS["ぽあろ"];   // 「ぽあろくん」と書いても同じ絵が出る
 
 // ストーリーのバトルで、プレイヤーの名前(STORY_CHARS に icon があれば、顔アイコンも出る)
 const STORY_PLAYER = "育久";
@@ -57,7 +59,11 @@ const STORY = [
   {
     title: "第2話(サンプル)",
     talk: [
+      ["ぽあろ", "育久くん、だいじょうぶ?"],
+      ["育久", "うん、なんとか!", "笑顔"],
+      ["ぽあろ", "よかったぁ!", "笑顔"],
       ["???", "なかなかやるな…!"],
+      ["ぽあろ", "ど、どうしよう…", "苦しい"],
       ["育久", "はぁ…はぁ…\nさっきのバトル、けっこうギリギリだった…", "苦しい"],
       ["???", "だが、次はそう簡単にはいかないぞ。"],
       ["育久", "望むところだ!", "笑顔"],
