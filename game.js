@@ -852,22 +852,74 @@ function drawDeckList() {
     $("deck-list").innerHTML = '<p class="note">まだカードがありません。「カード作成」で作るか、下のサンプルカードを追加してください。</p>';
     return;
   }
+  const moving = moveSel !== null;   // 「まとめて移動」中か
   const item = (c, cap) => {
-    const sel = deckSel.includes(c.id) ? " selected" : "";
-    return `<div class="deck-item" data-id="${c.id}"><div class="cardwrap">${cardHTML(c, sel)}${detailBtn(c)}</div>${cap ? `<div class="cap">${esc(cap)}</div>` : ""}<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="del" data-del="${c.id}">削除</button></div></div>`;
+    const sel = moving ? (moveSel.includes(c.id) ? " selected" : "") : deckSel.includes(c.id) ? " selected" : "";
+    const btns = moving ? "" : `<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="mv" data-move="${c.id}">📁</button><button class="del" data-del="${c.id}">削除</button></div>`;
+    return `<div class="deck-item${moving ? " moving" : ""}" data-id="${c.id}"><div class="cardwrap">${cardHTML(c, sel)}${detailBtn(c)}</div>${cap ? `<div class="cap">${esc(cap)}</div>` : ""}${btns}</div>`;
   };
-  let h = "<h3>通常カード</h3>";
-  h += normals.length ? `<div class="grid">${normals.map(c => item(c, "")).join("")}</div>` : '<p class="note">通常カードがありません。</p>';
+  // フォルダごとに分けて並べる(見出しをタップすると、たたむ・ひらく)
+  const groups = (list, capOf) => {
+    const order = allFolders().map(f => ({ key: f, label: "📁 " + f, list: list.filter(c => c.folder === f) }))
+      .concat([{ key: "", label: "フォルダなし", list: list.filter(c => !c.folder) }])
+      .filter(g => g.list.length);
+    const only = order.length === 1 && order[0].key === "";   // フォルダを使っていないときは見出しなし
+    return order.map(g => {
+      const closed = !only && foldClosed.has(g.key);
+      const nSel = g.list.filter(c => deckSel.includes(c.id)).length;
+      const head = only ? "" : `<div class="fold-head${closed ? " closed" : ""}" data-fold="${esc(g.key)}"><span class="arw">▼</span>${esc(g.label)}<span class="fold-n">${g.list.length}枚${!moving && nSel ? `・えらんだ${nSel}` : ""}</span></div>`;
+      return head + (closed ? "" : `<div class="grid">${g.list.map(c => item(c, capOf(c))).join("")}</div>`);
+    }).join("");
+  };
+  let h = "";
+  if (moving) h += `<div class="move-bar">移動するカードをタップしてえらんでください(${moveSel.length}枚えらんでいます)
+    <div class="row"><button id="btn-move-go" class="btn small"${moveSel.length ? "" : " disabled"}>📁 移動先をえらぶ</button><button id="btn-move-cancel" class="btn small ghost">やめる</button></div></div>`;
+  h += "<h3>通常カード</h3>";
+  h += normals.length ? groups(normals, () => "") : '<p class="note">通常カードがありません。</p>';
   h += "<h3>パワーアップカード</h3>";
   h += '<p class="note">えらぶと、元の通常カードと合わせて1枚として数えます。</p>';
   h += powers.length
-    ? `<div class="grid">${powers.map(c => {
+    ? groups(powers, c => {
         const b = cards.find(x => x.id === c.baseId);
-        return item(c, b ? `元:${b.name} / 💎${c.upCost}` : "(元のカードがありません)");
-      }).join("")}</div>`
+        return b ? `元:${b.name} / 💎${c.upCost}` : "(元のカードがありません)";
+      })
     : '<p class="note">パワーアップカードはありません。「カード作成」で作れます。</p>';
   $("deck-list").innerHTML = h;
+  $("deck-folder-bar").classList.toggle("hidden", moving);
 }
+
+// ----- デッキ編成でのフォルダ操作 -----
+const foldClosed = new Set();   // たたんでいるフォルダ
+let moveSel = null;             // 「まとめて移動」でえらんだカード(移動中でなければ null)
+function newFolderPrompt() {
+  const name = (prompt("新しいフォルダの名前を入れてください") || "").trim().slice(0, 16);
+  if (!name) return "";
+  const names = loadFolderNames();
+  if (!names.includes(name)) { names.push(name); saveFolderNames(names); }
+  return name;
+}
+// カードをフォルダへ移動する(ids: カードの番号のリスト)
+function moveCards(ids, folder) {
+  const cards = loadCards();
+  cards.forEach(c => { if (ids.includes(c.id)) { if (folder) c.folder = folder; else delete c.folder; } });
+  if (!saveCards(cards)) return;
+  if (folder) foldClosed.delete(folder);
+  moveSel = null;
+  drawDeckList();
+}
+// 移動先をえらぶメニュー
+function chooseFolderFor(ids) {
+  const cur = ids.length === 1 ? (loadCards().find(c => c.id === ids[0]) || {}).folder || "" : null;
+  const buttons = allFolders().map(f => ({ label: "📁 " + f + (f === cur ? "(いまここ)" : ""), disabled: f === cur, action: () => moveCards(ids, f) }));
+  buttons.push({ label: "フォルダなし" + (cur === "" ? "(いまここ)" : ""), disabled: cur === "", action: () => moveCards(ids, "") });
+  buttons.push({ label: "＋ 新しいフォルダを作って移動", action: () => { const f = newFolderPrompt(); if (f) moveCards(ids, f); } });
+  openMenu({ title: "移動先のフォルダ", msg: `${ids.length}枚のカードを移動します。`, buttons });
+}
+$("btn-deck-newfolder").onclick = () => {
+  const f = newFolderPrompt();
+  if (f) alert(`フォルダ「${f}」を作りました。カードの📁ボタンか「まとめて移動」で、カードを入れられます。`);
+};
+$("btn-deck-movemode").onclick = () => { moveSel = []; drawDeckList(); };
 
 // カードをタップしたときの、えらぶ・外すの処理
 function toggleCard(id) {
@@ -895,6 +947,25 @@ function toggleCard(id) {
 }
 
 $("deck-list").addEventListener("click", e => {
+  const fh = e.target.closest(".fold-head");
+  if (fh) {   // フォルダの見出し:たたむ・ひらく
+    const k = fh.dataset.fold;
+    if (foldClosed.has(k)) foldClosed.delete(k); else foldClosed.add(k);
+    drawDeckList();
+    return;
+  }
+  if (e.target.id === "btn-move-go") { chooseFolderFor(moveSel); return; }
+  if (e.target.id === "btn-move-cancel") { moveSel = null; drawDeckList(); return; }
+  const mvId = e.target.dataset.move;
+  if (mvId) { chooseFolderFor([mvId]); return; }
+  if (moveSel !== null) {   // まとめて移動中:タップで、移動するカードをえらぶ
+    const it = e.target.closest(".deck-item");
+    if (!it) return;
+    const id = it.dataset.id;
+    moveSel = moveSel.includes(id) ? moveSel.filter(x => x !== id) : moveSel.concat(id);
+    drawDeckList();
+    return;
+  }
   const editCid = e.target.dataset.editcard;
   if (editCid) { show("create"); loadIntoForm(editCid); return; }
   const delId = e.target.dataset.del;
@@ -1801,10 +1872,11 @@ function closeMenu() { $("menu").classList.remove("open"); }
 function openMenu(opt) {
   const panel = $("menu-panel");
   panel.onclick = null;
-  panel.classList.toggle("flip", isPvp() && G.turn === "cpu");   // 上の人のターンは逆向きに出す
+  const inBattle = $("screen-battle").classList.contains("active");
+  panel.classList.toggle("flip", inBattle && isPvp() && G.turn === "cpu");   // 上の人のターンは逆向きに出す
   let h = "";
   // 自分のカードのメニューには、いま持っているコストを出す
-  if (opt.card && !opt.noGems && G) h += `<div class="gembar">いまのコスト ${gemsHTML(me().cost)}</div>`;
+  if (opt.card && !opt.noGems && G && inBattle) h += `<div class="gembar">いまのコスト ${gemsHTML(me().cost)}</div>`;
   if (opt.card) h += bigCardHTML(opt.card, false, true);
   if (opt.title) h += `<h3>${esc(opt.title)}</h3>`;
   if (opt.msg) h += `<p class="msg">${esc(opt.msg)}</p>`;

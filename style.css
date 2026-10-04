@@ -893,3 +893,18 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 .folder-row { display: flex; gap: 6px; align-items: stretch; }
 .folder-row select { flex: 1; min-width: 0; }
 .folder-row .btn.small { width: auto; flex: none; padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+
+/* デッキ編成:フォルダ */
+#deck-folder-bar { display: flex; gap: 8px; margin: 6px 0 4px; }
+#deck-folder-bar .btn { flex: 1; }
+.fold-head { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; padding: 8px 10px; font-size: 14px; font-weight: bold;
+  color: var(--accent); background: var(--ghost-bg); border: 1px solid var(--ghost-line); border-radius: 10px; cursor: pointer; }
+.fold-head .arw { font-size: 11px; transition: transform .15s; }
+.fold-head.closed .arw { transform: rotate(-90deg); }
+.fold-head .fold-n { margin-left: auto; font-size: 11px; font-weight: normal; color: var(--muted); }
+.deck-item .mv { background: #8a6d2a; }
+.deck-item .btns button { padding: 3px 6px; }
+.move-bar { position: sticky; top: 0; z-index: 5; margin: 8px 0; padding: 10px; font-size: 13px; line-height: 1.5;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.move-bar .row { display: flex; gap: 8px; margin-top: 8px; }
+.move-bar .btn { flex: 1; }

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 
@@ -228,6 +228,10 @@
     <input type="text" id="f-deckname" maxlength="12" placeholder="例:ねこデッキ">
     <p class="note">通常カードを10枚えらんでください(タップで選択)。</p>
     <p id="deck-count" class="count"></p>
+    <div id="deck-folder-bar" class="row">
+      <button id="btn-deck-newfolder" class="btn small ghost">＋ 新しいフォルダ</button>
+      <button id="btn-deck-movemode" class="btn small ghost">📁 まとめて移動</button>
+    </div>
     <div id="deck-list"></div>
     <button id="btn-sample" class="btn ghost">お試し用サンプルカードを追加</button>
     <button id="btn-save-deck" class="btn">このデッキを保存</button>
@@ -312,7 +316,7 @@
   </div>
 </div>
 
-<script src="story.js?v=18"></script>
-<script src="game.js?v=18"></script>
+<script src="story.js?v=19"></script>
+<script src="game.js?v=19"></script>
 </body>
 </html>
