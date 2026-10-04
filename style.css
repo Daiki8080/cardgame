@@ -908,3 +908,18 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
   background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
 .move-bar .row { display: flex; gap: 8px; margin-top: 8px; }
 .move-bar .btn { flex: 1; }
+
+/* ストーリー:背景つきの絵(ドラゴン使いなど)は枠で囲む */
+#talk-portrait img.chara.framed { height: 100%; width: auto; max-width: 92vw; object-fit: cover; border: 1px solid var(--accent); border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(230,192,104,.15), 0 10px 30px rgba(0,0,0,.6); filter: none; }
+
+/* ストーリーのバトル:顔アイコンと名前 */
+.info .face { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; overflow: hidden; border: 2px solid var(--accent);
+  background: #fff; box-shadow: 0 0 8px rgba(230,192,104,.35); }
+.info .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.info .face.facepop { animation: facePop .35s ease-out; }
+@keyframes facePop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.info .who.named { width: auto; max-width: 74px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note.warn { color: #ffb4a8; }
+#screen-battle.story .info { height: 44px; }
+#screen-battle.story .info .face { width: 42px; height: 42px; }

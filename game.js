@@ -1064,7 +1064,7 @@ function shuffle(a) {
 function isPvp() { return !!G && G.mode === "pvp"; }
 function who(side) {
   if (isPvp()) return side === G.player ? "プレイヤー1" : "プレイヤー2";
-  return side === G.player ? "あなた" : (G.enemyName || "CPU");
+  return side === G.player ? (G.playerName || "あなた") : (G.enemyName || "CPU");
 }
 function isAI(side) { return !isPvp() && side === G.cpu; }       // CPUが動かしている側か
 function sideOf(name) { return name === "player" ? G.player : G.cpu; }
@@ -1148,15 +1148,21 @@ async function startBattle(storyMode) {
   const cName = chap ? (chap.enemy && chap.enemy.deck) : sel.c;
   if (cName && cName !== "auto") {
     // ふつうの対戦はデッキの番号、ストーリーはデッキの名前でさがす
-    const cd = decks.find(d => chap ? d.name === cName : d.id === cName);
+    const cd = decks.find(d => chap ? sameName(d.name, cName) : d.id === cName);
     if (cd && deckValid(cd)) cChars = deckCards(cd);
   }
   G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: true, over: false, log: [], acting: null, first: "player",
         mode: !chap && sel.m === "pvp" ? "pvp" : "cpu", live: false,
-        story: !!chap, enemyName: chap && chap.enemy && chap.enemy.name ? chap.enemy.name : "" };
+        story: !!chap, enemyName: chap && chap.enemy && chap.enemy.name ? chap.enemy.name : "",
+        playerName: chap ? storyPlayer() : "" };
+  // ストーリーでは、プレイヤーと敵の顔アイコンを出す(表情は mood で切りかえ)
+  G.faces = { player: chap ? faceSet(G.playerName) : null, cpu: chap ? faceSet(G.enemyName) : null };
+  G.mood = { player: "通常", cpu: "通常" };
+  G.faceT = {};
   T = null;
   show("battle");
-  $("screen-battle").classList.toggle("pvp", G.mode === "pvp");   // 2人対戦は、上下向かい合わせの画面
+  $("screen-battle").classList.toggle("pvp", G.mode === "pvp");
+  $("screen-battle").classList.toggle("story", !!G.story);   // ストーリーは顔アイコンを大きめに出す   // 2人対戦は、上下向かい合わせの画面
   render();
   // コイントスで先攻・後攻を決める
   G.first = await coinToss();
@@ -1252,6 +1258,11 @@ function hitChar(t, dmg, isAttack) {
   const before = t.hp;
   t.hp -= r.dmg;
   if (t.guard && before >= 2 && t.hp <= 0) { t.hp = 1; r.survived = true; }
+  if (r.dmg > 0 && G) {   // 顔アイコン:やられた側は苦しい顔、当てた側は笑顔
+    const owner = G.player.field.includes(t) ? G.player : G.cpu;
+    react(foe(owner), "笑顔");
+    react(owner, "苦しい");
+  }
   return r;
 }
 function hitLog(t, r) {
@@ -1306,6 +1317,7 @@ function itemBlock(side, card) {
 // アイテムを使う。target は対象のキャラ、target2 は「交代」で場に出す手札のキャラ
 async function useItem(side, card, target, target2) {
   if (itemBlock(side, card)) return false;
+  react(side, "笑顔");   // アイテムを使ったら笑顔
   const foeSide = foe(side);
   const myInfo = infoEl(side), foeInfo = infoEl(foeSide);
   side.hand = side.hand.filter(c => c !== card);
@@ -1349,6 +1361,7 @@ async function useItem(side, card, target, target2) {
     for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
   } else if (k === "laser") {
     foeSide.hp -= 30;
+    react(foeSide, "苦しい");
     render();
     fx(foeInfo, "laser"); popAt(foeInfo, "-30");
     await sleep(900);
@@ -1496,6 +1509,7 @@ async function doSkill(side, ch, n, target) {
     if (target.hp <= 0) await sendDown(foeSide, target);
   } else {
     foeSide.hp -= dmg;
+    react(side, "笑顔"); react(foeSide, "苦しい");
     addLog(`直接攻撃で${dmg}ダメージ!`);
     render();
     fx(infoEl(foeSide), "slash"); popAt(infoEl(foeSide), "-" + dmg);
@@ -1506,6 +1520,7 @@ async function doSkill(side, ch, n, target) {
   // 捨て身は、自分もダメージを受ける
   if (sk.type === "sacrifice" && !G.over) {
     ch.hp -= sk.self;
+    react(side, "苦しい");
     addLog(`${ch.name}も${sk.self}ダメージを受けた`);
     render();
     fx(cardEl(ch.uid), "slash"); popDamage(ch.uid, "-" + sk.self);
@@ -1566,7 +1581,7 @@ function finishGame(playerWon) {
   G.over = true;
   G.acting = null;
   T = null;
-  addLog(playerWon ? "あなたの勝ち!" : "あなたの負け…");
+  addLog(playerWon ? `${who(G.player)}の勝ち!` : `${who(G.player)}の負け…`);
   render();
   if (G.story && playerWon) saveStory({ ch: SS.ch + 1 });   // 勝ったら、次の話へ進んだことを保存
   const story = G.story;
@@ -1818,7 +1833,8 @@ function infoHTML(side, label, showHand, name) {
       <div class="gemsbox">${gemsHTML(side.cost)}</div>
       <button class="btn small endbtn" data-end="${name}"${on ? " disabled" : ""}>ターン終了</button>`;
   }
-  return `<div class="who">${label}</div>
+  const face = faceSrc(name);   // ストーリーの顔アイコン
+  return `${face ? `<div class="face"><img id="face-${name}" src="${face}" alt=""></div>` : ""}<div class="who${face ? " named" : ""}">${label}</div>
     ${barHTML(side, side.hp, START_HP, "big", "HP " + Math.max(0, side.hp))}
     <div class="gemsbox">${gemsHTML(side.cost)}</div>
     <div class="stat">📚${side.deck.length}</div><div class="stat">☠${side.down.length}</div>${showHand ? `<div class="stat">✋${side.hand.length}</div>` : ""}`;
@@ -1840,7 +1856,7 @@ function render() {
   const handScroll = $("p-hand").scrollLeft;   // 手札のスクロール位置をおぼえておく
   const handScroll2 = $("c-hand").scrollLeft;
   $("c-info").innerHTML = infoHTML(G.cpu, pvp ? "P2" : esc(G.enemyName || "CPU"), true, "cpu");
-  $("p-info").innerHTML = infoHTML(G.player, "あなた", false, "player");
+  $("p-info").innerHTML = infoHTML(G.player, esc(G.playerName || "あなた"), false, "player");
   $("c-field").innerHTML = fieldHTML(G.cpu.field);
   $("p-field").innerHTML = fieldHTML(G.player.field);
   $("p-hand").innerHTML = handHTML(G.player, "player");
@@ -1858,7 +1874,7 @@ function render() {
   if (G.over) label = "バトル終了";
   else if (T) label = "👆 " + T.prompt;
   else if (pvp) label = "▶ " + who(me()) + "のターン";
-  else label = G.turn === "player" ? "▶ あなたのターン" : who(G.cpu) + "のターン…";
+  else label = G.turn === "player" ? "▶ " + who(G.player) + "のターン" : who(G.cpu) + "のターン…";
   $("turn-label").textContent = label;
   $("log").innerHTML = G.log.slice(-3).map(t => `<div>${esc(t)}</div>`).join("");   // 最新の3行
   $("btn-end").disabled = G.over || G.busy || !humanTurn() || !!T;
@@ -2130,7 +2146,49 @@ const SS = { ch: 0, lines: [], i: 0, after: null, typing: false, timer: 0, full:
 function storyList() { return typeof STORY !== "undefined" && Array.isArray(STORY) ? STORY : []; }
 function storyChars() { return typeof STORY_CHARS !== "undefined" && STORY_CHARS ? STORY_CHARS : {}; }
 // 表情の画像を先に読みこんでおく(切りかえのときに、ちらつかないように)
-Object.values(storyChars()).forEach(c => Object.values(c).forEach(src => { const im = new Image(); im.src = src; }));
+Object.values(storyChars()).forEach(c => [c, c.icon || {}].forEach(set => Object.values(set).forEach(src => {
+  if (typeof src === "string") { const im = new Image(); im.src = src; }
+})));
+// 表情の画像をえらぶ(その表情がなければ「通常」)
+function pickFace(set, mood) {
+  const v = set[mood];
+  return typeof v === "string" ? v : set["通常"];
+}
+function storyPlayer() { return typeof STORY_PLAYER === "string" && STORY_PLAYER ? STORY_PLAYER : "あなた"; }
+// 名前くらべ(全角・半角の数字や英字、空白のちがいは気にしない)
+function sameName(a, b) {
+  const n = x => String(x || "").normalize("NFKC").replace(/\s/g, "");
+  return n(a) === n(b);
+}
+// バトルの顔アイコン(story.js の STORY_CHARS の icon)
+function faceSet(name) {
+  const c = storyChars()[name];
+  return c && c.icon ? c.icon : null;
+}
+function faceSrc(name) {
+  if (!G || !G.faces || !G.faces[name]) return "";
+  return pickFace(G.faces[name], G.mood[name]);
+}
+// 表情を少しのあいだ変える(しばらくすると通常にもどる)
+function react(side, mood) {
+  if (!G || !G.story || !G.faces) return;
+  const name = side === G.player ? "player" : "cpu";
+  if (!G.faces[name]) return;
+  G.mood[name] = mood;
+  const el = $("face-" + name);
+  if (el) {
+    el.src = faceSrc(name);
+    el.parentNode.classList.remove("facepop"); void el.offsetWidth; el.parentNode.classList.add("facepop");
+  }
+  clearTimeout(G.faceT[name]);
+  const g = G;
+  G.faceT[name] = setTimeout(() => {
+    if (G !== g) return;
+    G.mood[name] = "通常";
+    const e2 = $("face-" + name);
+    if (e2) e2.src = faceSrc(name);
+  }, 1600);
+}
 function storyEnding() { return typeof STORY_ENDING !== "undefined" && Array.isArray(STORY_ENDING) ? STORY_ENDING : []; }
 function loadStory() {
   try { return JSON.parse(localStorage.getItem("cb_story")) || {}; } catch (e) { return {}; }
@@ -2234,11 +2292,11 @@ function nextLine() {
     if (pt.dataset.key !== key) {   // ちがうキャラになったら、下からふわっと出す
       pt.dataset.key = key;
       const src = card ? (card.full || card.img) : "";
-      pt.innerHTML = chara ? '<img class="chara" alt="">' : src ? `<img src="${src}" alt="">` : card && card.emoji ? `<div class="emoji">${card.emoji}</div>` : "";
+      pt.innerHTML = chara ? `<img class="chara${chara.frame ? " framed" : ""}" alt="">` : src ? `<img src="${src}" alt="">` : card && card.emoji ? `<div class="emoji">${card.emoji}</div>` : "";
       pt.classList.remove("in"); void pt.offsetWidth; pt.classList.add("in");
     }
     // 表情を切りかえる(同じキャラなら、絵だけ入れかえる)
-    if (chara) pt.querySelector("img").src = chara[mood] || chara["通常"] || Object.values(chara)[0];
+    if (chara) pt.querySelector("img").src = pickFace(chara, mood);
     pt.classList.remove("dim");
   } else {
     pt.classList.add("dim");   // ナレーションや、絵のない人が話しているときは、前のイラストを暗くする
@@ -2284,6 +2342,9 @@ function renderStoryReady() {
   const chap = storyList()[SS.ch] || {};
   $("sready-title").textContent = chap.title || `第${SS.ch + 1}話`;
   $("sready-enemy").textContent = (chap.enemy && chap.enemy.name) || "CPU";
+  const want = chap.enemy && chap.enemy.deck;
+  const found = !want || want === "auto" || loadDecks().some(d => sameName(d.name, want) && deckValid(d));
+  $("sready-warn").textContent = found ? "" : `※ 敵のデッキ「${want}」が見つからないか、通常カードが10枚そろっていません。いまはゲームのデッキで戦います。`;
   const decks = loadDecks().filter(deckValid);
   const s = loadStory();
   $("sel-sdeck").innerHTML = decks.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
