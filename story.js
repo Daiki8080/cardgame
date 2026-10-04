@@ -26,14 +26,16 @@
 // 「通常」はかならず入れる。表情を書かなかったセリフや、イラストがない表情のときは「通常」が出ます
 // icon … バトル中に出す顔アイコン(表情ごと)
 // frame: true … 背景つきの絵を、枠で囲んで表示する
+// (IMG_8248 = 育久の顔・通常 / IMG_8249 = 育久の顔・笑顔 / IMG_8251 = 育久の顔・苦しい /
+//  IMG_8253 = ドラゴン使いの会話の絵 / IMG_8254 = ドラゴン使いの顔)
 const STORY_CHARS = {
   "育久": {
     "通常": "ikuhisa_normal.png", "笑顔": "ikuhisa_smile.png", "苦しい": "ikuhisa_pain.png",
-    icon: { "通常": "ikuhisa_face_normal.jpg", "笑顔": "ikuhisa_face_smile.jpg", "苦しい": "ikuhisa_face_pain.jpg" },
+    icon: { "通常": "IMG_8248.jpeg", "笑顔": "IMG_8249.jpeg", "苦しい": "IMG_8251.jpeg" },
   },
   "ドラゴン使い": {
-    "通常": "dragon_talk.jpg", frame: true,
-    icon: { "通常": "dragon_face.jpg" },
+    "通常": "IMG_8253.jpeg", frame: true,
+    icon: { "通常": "IMG_8254.jpeg" },
   },
 };
 
