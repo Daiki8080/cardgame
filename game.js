@@ -1178,11 +1178,13 @@ async function startBattle(storyMode) {
   $("screen-battle").classList.toggle("story", !!G.story);   // ストーリーは顔アイコンを大きめに出す   // 2人対戦は、上下向かい合わせの画面
   render();
   // コイントスで先攻・後攻を決める
-  // ストーリーは、カードがぶつかり合って火花が散る演出のあとで、コイントス
-  if (G.story) {
-    const mustIds = storyMust(chap).ids;
-    const pCard = pChars.find(c => mustIds.includes(c.id)) || pChars.find(c => !isPower(c));
-    const cCard = cChars.find(c => !isPower(c)) || cChars[0];
+  // カードがぶつかり合って火花が散る演出のあとで、コイントス
+  {
+    const mustIds = chap ? storyMust(chap).ids : [];
+    const normalsOf = list => list.filter(c => !isPower(c));
+    const pick = list => list[Math.floor(Math.random() * list.length)];   // ふつうの対戦は、デッキからランダムに1枚
+    const pCard = pChars.find(c => mustIds.includes(c.id)) || (chap ? normalsOf(pChars)[0] : pick(normalsOf(pChars)));
+    const cCard = (chap ? normalsOf(cChars)[0] : pick(normalsOf(cChars))) || cChars[0];
     await clashIntro(pCard, cCard);
   }
   G.first = await coinToss();
