@@ -923,3 +923,74 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 .note.warn { color: #ffb4a8; }
 #screen-battle.story .info { height: 44px; }
 #screen-battle.story .info .face { width: 42px; height: 42px; }
+
+/* ストーリー:固定のカード */
+.cardwrap { position: relative; }
+.lock { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); z-index: 4; white-space: nowrap;
+  font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 8px; color: var(--btn-ink); background: var(--btn-grad);
+  box-shadow: 0 1px 4px rgba(0,0,0,.5); pointer-events: none; }
+#sready-cards .cardwrap { margin-bottom: 6px; }
+.note.must { color: var(--accent); }
+.note.must.bad { color: #ffb4a8; }
+.lock-note { color: var(--accent) !important; }
+
+/* ===== バトル開始の演出:カードがぶつかって火花 ===== */
+#clash-overlay { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(38,48,106,.97), rgba(4,6,16,.99) 70%); }
+#clash-overlay.out { opacity: 0; transition: opacity .35s; }
+.clash-card { position: absolute; top: 50%; left: 50%; width: var(--cw); height: var(--ch); margin: calc(var(--ch) / -2) 0 0 calc(var(--cw) / -2);
+  filter: drop-shadow(0 0 14px rgba(230,192,104,.6)); }
+#clash-l { transform: translate(-120vw, 0) rotate(-35deg) scale(1.9); }
+#clash-r { transform: translate(120vw, 0) rotate(35deg) scale(1.9); }
+#clash-overlay.go #clash-l { animation: clashL 1.9s cubic-bezier(.55,0,.9,.4) forwards; }
+#clash-overlay.go #clash-r { animation: clashR 1.9s cubic-bezier(.55,0,.9,.4) forwards; }
+/* 0〜32%で飛んできてぶつかる → はね返って少し離れて止まる */
+@keyframes clashL {
+  0%   { transform: translate(-120vw, -10px) rotate(-35deg) scale(1.9); }
+  32%  { transform: translate(-46px, 0) rotate(-8deg) scale(1.9); animation-timing-function: cubic-bezier(.2,.8,.3,1); }
+  45%  { transform: translate(-96px, 6px) rotate(-16deg) scale(1.9); }
+  100% { transform: translate(-88px, 0) rotate(-12deg) scale(1.9); }
+}
+@keyframes clashR {
+  0%   { transform: translate(120vw, 10px) rotate(35deg) scale(1.9); }
+  32%  { transform: translate(46px, 0) rotate(8deg) scale(1.9); animation-timing-function: cubic-bezier(.2,.8,.3,1); }
+  45%  { transform: translate(96px, -6px) rotate(16deg) scale(1.9); }
+  100% { transform: translate(88px, 0) rotate(12deg) scale(1.9); }
+}
+/* ぶつかった瞬間:画面がゆれて、白く光る */
+#clash-overlay.hit { animation: clashShake .45s linear; }
+@keyframes clashShake {
+  0%,100% { transform: none; } 15% { transform: translate(-10px, 6px); } 30% { transform: translate(9px, -7px); }
+  45% { transform: translate(-7px, -4px); } 60% { transform: translate(6px, 5px); } 80% { transform: translate(-3px, 2px); }
+}
+#clash-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+#clash-overlay.hit #clash-flash { animation: clashFlash .35s ease-out; }
+@keyframes clashFlash { 0% { opacity: .8; } 100% { opacity: 0; } }
+#clash-ring { position: absolute; top: 50%; left: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+  border: 4px solid #ffe7a0; box-shadow: 0 0 24px #ffb84a, inset 0 0 14px #ffb84a; opacity: 0; }
+#clash-overlay.hit #clash-ring { animation: clashRing .7s ease-out forwards; }
+@keyframes clashRing { 0% { opacity: 1; transform: scale(.3); } 100% { opacity: 0; transform: scale(9); } }
+/* 火花 */
+#clash-sparks { position: absolute; top: 50%; left: 50%; width: 0; height: 0; z-index: 3; }
+#clash-sparks i { position: absolute; left: -2px; top: -1px; width: 30px; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, rgba(255,255,255,0), #fff6c8 40%, #ffb84a);
+  box-shadow: 0 0 8px #ffb84a, 0 0 16px #ff7a1a; transform-origin: 0 50%;
+  animation: spark var(--d) cubic-bezier(.1,.7,.3,1) forwards; }
+#clash-sparks i.big { width: 46px; height: 5px; }
+@keyframes spark {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(var(--r)) scaleX(1.4); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scaleX(.3); }
+}
+/* BATTLE START の文字と名前 */
+#clash-text { position: absolute; left: 0; right: 0; top: 50%; margin-top: 118px; text-align: center; opacity: 0;
+  font-family: var(--font-display); font-size: 30px; font-weight: bold; letter-spacing: .16em;
+  background: linear-gradient(180deg, #fff 0%, var(--accent) 55%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px rgba(230,192,104,.7)); }
+#clash-overlay.hit #clash-text { animation: clashText .6s .15s ease-out forwards; }
+@keyframes clashText { 0% { opacity: 0; transform: scale(2.2); letter-spacing: .6em; } 100% { opacity: 1; transform: scale(1); letter-spacing: .16em; } }
+#clash-names { position: absolute; left: 0; right: 0; top: 50%; margin-top: -190px; display: flex; justify-content: center; align-items: center; gap: 14px;
+  font-weight: bold; font-size: 16px; color: var(--text); opacity: 0; }
+#clash-names b { font-family: var(--font-display); font-size: 22px; color: var(--accent); text-shadow: 0 0 10px rgba(230,192,104,.8); }
+#clash-overlay.hit #clash-names { animation: clashNames .5s .25s ease-out forwards; }
+@keyframes clashNames { 0% { opacity: 0; transform: translateY(-14px); } 100% { opacity: 1; transform: none; } }

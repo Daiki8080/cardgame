@@ -82,6 +82,7 @@
   <h2 id="sready-title"></h2>
   <p class="note">対戦あいて:<b id="sready-enemy"></b></p>
   <p id="sready-warn" class="note warn"></p>
+  <p id="sready-must" class="note must"></p>
   <label>使うデッキ</label>
   <select id="sel-sdeck"></select>
   <div id="sready-cards"></div>
@@ -300,6 +301,17 @@
   </div>
 </div>
 
+<!-- ===== バトル開始の演出(カードがぶつかって火花が散る) ===== -->
+<div id="clash-overlay" class="hidden">
+  <div id="clash-flash"></div>
+  <div id="clash-ring"></div>
+  <div id="clash-l" class="clash-card"></div>
+  <div id="clash-r" class="clash-card"></div>
+  <div id="clash-sparks"></div>
+  <div id="clash-text">BATTLE START</div>
+  <div id="clash-names"></div>
+</div>
+
 <!-- ===== コイントス(バトル開始のとき) ===== -->
 <div id="coin-overlay" class="hidden">
   <div class="coin-box">
@@ -317,7 +329,7 @@
   </div>
 </div>
 
-<script src="story.js?v=25"></script>
+<script src="story.js?v=27"></script>
 <script src="game.js?v=20"></script>
 </body>
 </html>

@@ -407,8 +407,10 @@ document.querySelectorAll("[data-go]").forEach(b => {
 $("btn-create").onclick = () => show("create");
 // デッキ編成の「もどる」ボタンは、来た画面にもどる(タイトル or ストーリーのカード選択)
 let deckReturn = "title";
+let deckLock = [];   // ストーリーで「固定」のカード(デッキから外せない)
 function openDeckScreen(from) {
   deckReturn = from;
+  deckLock = from === "sready" ? storyMust(storyList()[SS.ch]).ids : [];
   $("btn-deck-back").textContent = from === "sready" ? "カード選択にもどる" : "タイトルへ戻る";
   show("deck");
 }
@@ -830,6 +832,7 @@ function openDeckEdit(id) {
   const d = loadDecks().find(x => x.id === id);
   const cards = loadCards();
   deckSel = d ? d.ids.filter(i => cards.some(c => c.id === i)) : [];
+  deckLock.forEach(id => { if (!deckSel.includes(id)) deckSel.unshift(id); });   // 固定のカードは、さいしょから入れておく
   $("f-deckname").value = d ? d.name : "";
   $("deck-manage").classList.add("hidden");
   $("deck-edit").classList.remove("hidden");
@@ -856,7 +859,8 @@ function drawDeckList() {
   const item = (c, cap) => {
     const sel = moving ? (moveSel.includes(c.id) ? " selected" : "") : deckSel.includes(c.id) ? " selected" : "";
     const btns = moving ? "" : `<div class="btns"><button class="edit" data-editcard="${c.id}">編集</button><button class="mv" data-move="${c.id}">📁</button><button class="del" data-del="${c.id}">削除</button></div>`;
-    return `<div class="deck-item${moving ? " moving" : ""}" data-id="${c.id}"><div class="cardwrap">${cardHTML(c, sel)}${detailBtn(c)}</div>${cap ? `<div class="cap">${esc(cap)}</div>` : ""}${btns}</div>`;
+    const lock = deckLock.includes(c.id) ? '<div class="lock">🔒固定</div>' : "";
+    return `<div class="deck-item${moving ? " moving" : ""}" data-id="${c.id}"><div class="cardwrap">${cardHTML(c, sel)}${detailBtn(c)}${lock}</div>${cap ? `<div class="cap">${esc(cap)}</div>` : ""}${btns}</div>`;
   };
   // フォルダごとに分けて並べる(見出しをタップすると、たたむ・ひらく)
   const groups = (list, capOf) => {
@@ -872,6 +876,10 @@ function drawDeckList() {
     }).join("");
   };
   let h = "";
+  if (deckLock.length && !moving) {
+    const names = deckLock.map(id => (cards.find(c => c.id === id) || {}).name).filter(Boolean);
+    h += `<p class="note lock-note">🔒 ストーリーでは「${esc(names.join("」「"))}」をかならず入れます(固定)。</p>`;
+  }
   if (moving) h += `<div class="move-bar">移動するカードをタップしてえらんでください(${moveSel.length}枚えらんでいます)
     <div class="row"><button id="btn-move-go" class="btn small"${moveSel.length ? "" : " disabled"}>📁 移動先をえらぶ</button><button id="btn-move-cancel" class="btn small ghost">やめる</button></div></div>`;
   h += "<h3>通常カード</h3>";
@@ -926,6 +934,7 @@ function toggleCard(id) {
   const cards = loadCards();
   const c = cards.find(x => x.id === id);
   if (!c) return;
+  if (deckSel.includes(id) && deckLock.includes(id)) return alert(`「${c.name}」はストーリーのために固定されています(外せません)。`);
   if (deckSel.includes(id)) {
     deckSel = deckSel.filter(x => x !== id);
     if (!isPower(c)) {   // 通常カードを外したら、そのパワーアップカードも外す
@@ -1144,6 +1153,10 @@ async function startBattle(storyMode) {
     show(chap ? "sready" : "ready");
     return;
   }
+  if (chap) {
+    const prob = storyDeckProblem(pd);
+    if (prob) { alert(prob); show("sready"); return; }
+  }
   let cChars = CPU_CARDS.concat(CPU_POWERS);   // 「おまかせ」ならゲームのデッキ
   const cName = chap ? (chap.enemy && chap.enemy.deck) : sel.c;
   if (cName && cName !== "auto") {
@@ -1165,12 +1178,50 @@ async function startBattle(storyMode) {
   $("screen-battle").classList.toggle("story", !!G.story);   // ストーリーは顔アイコンを大きめに出す   // 2人対戦は、上下向かい合わせの画面
   render();
   // コイントスで先攻・後攻を決める
+  // ストーリーは、カードがぶつかり合って火花が散る演出のあとで、コイントス
+  if (G.story) {
+    const mustIds = storyMust(chap).ids;
+    const pCard = pChars.find(c => mustIds.includes(c.id)) || pChars.find(c => !isPower(c));
+    const cCard = cChars.find(c => !isPower(c)) || cChars[0];
+    await clashIntro(pCard, cCard);
+  }
   G.first = await coinToss();
   G.live = true;
   addLog(`コイントス:${who(sideOf(G.first))}の先攻!`);
   if (isPvp()) startHumanTurn(G.first);
   else if (G.first === "player") startPlayerTurn();
   else await cpuTurn();
+}
+
+// バトル開始の演出:左右からカードが飛んできて、まん中でぶつかり、火花が散る
+async function clashIntro(pCard, cCard) {
+  const ov = $("clash-overlay");
+  $("clash-l").innerHTML = pCard ? cardHTML(pCard) : "";
+  $("clash-r").innerHTML = cCard ? cardHTML(cCard) : "";
+  $("clash-sparks").innerHTML = "";
+  $("clash-names").innerHTML = `<span>${esc(who(G.player))}</span><b>VS</b><span>${esc(who(G.cpu))}</span>`;
+  ov.className = "";               // いったん最初の状態に
+  void ov.offsetWidth;
+  ov.classList.add("go");          // カードが飛んでくる
+  await sleep(620);
+  // ぶつかった!
+  ov.classList.add("hit");
+  const sp = $("clash-sparks");
+  for (let i = 0; i < 46; i++) {
+    const s = document.createElement("i");
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 90 + Math.random() * 170;
+    s.style.setProperty("--dx", Math.cos(ang) * dist + "px");
+    s.style.setProperty("--dy", Math.sin(ang) * dist * 0.8 + "px");
+    s.style.setProperty("--r", (ang * 180 / Math.PI) + "deg");
+    s.style.setProperty("--d", (0.45 + Math.random() * 0.45) + "s");
+    if (i % 3 === 0) s.className = "big";
+    sp.appendChild(s);
+  }
+  await sleep(1300);
+  ov.classList.add("out");
+  await sleep(380);
+  ov.className = "hidden";
 }
 
 // コイントス(FIRSTならあなたが先攻、SECONDならCPUが先攻)。さっと終わる
@@ -1583,7 +1634,8 @@ function finishGame(playerWon) {
   T = null;
   addLog(playerWon ? `${who(G.player)}の勝ち!` : `${who(G.player)}の負け…`);
   render();
-  if (G.story && playerWon) saveStory({ ch: SS.ch + 1 });   // 勝ったら、次の話へ進んだことを保存
+  // 勝ったら、次の話へ進んだことを保存(前のストーリーを遊びなおしたときは、進み具合をもどさない)
+  if (G.story && playerWon) saveStory({ ch: Math.max(loadStory().ch || 0, SS.ch + 1) });
   const story = G.story;
   setTimeout(() => {
     $("result-title").textContent = playerWon ? "🎉 勝利!" : "😢 敗北…";
@@ -2135,6 +2187,7 @@ $("btn-quit").onclick = () => {
     T = null;
     closeMenu();
     $("coin-overlay").classList.add("hidden");
+    $("clash-overlay").className = "hidden";
     show("title");
   }
 };
@@ -2209,7 +2262,7 @@ function renderStoryMenu() {
     $("story-info").textContent = "ストーリーはクリアずみです!(つづきからで、エンディングをもう一度見られます)";
     cont.disabled = false;
   } else {
-    $("story-info").textContent = `つづき:${list[s.ch].title || "第" + (s.ch + 1) + "話"}`;
+    $("story-info").textContent = `つづき:ストーリー${s.ch + 1}${list[s.ch].title ? "(" + list[s.ch].title + ")" : ""}`;
     cont.disabled = false;
   }
 }
@@ -2220,10 +2273,18 @@ $("btn-story-new").onclick = () => {
   saveStory({ ch: 0 });
   startChapter(0);
 };
+// つづきから:遊ぶストーリーをえらぶ(進んだところまで遊べる。まだのストーリーはカギつき)
 $("btn-story-cont").onclick = () => {
-  const s = loadStory();
-  if (s.ch >= storyList().length) playEnding();
-  else startChapter(s.ch);
+  const s = loadStory(), list = storyList();
+  const reached = Math.min(s.ch, list.length);   // ここまで遊べる
+  const buttons = list.map((c, i) => ({
+    label: i <= reached ? `ストーリー${i + 1}${c.title ? "　" + c.title : ""}${i === s.ch ? "　▶つづき" : ""}`
+                        : `🔒 ストーリー${i + 1}`,
+    disabled: i > reached,
+    action: () => startChapter(i),
+  }));
+  if (s.ch >= list.length) buttons.push({ label: "エンディング", action: playEnding });
+  openMenu({ title: "どのストーリーから遊ぶ?", note: "クリアしたストーリーは、何度でも遊べます。", buttons });
 };
 
 // その話を始める(会話 → カード選択)
@@ -2350,14 +2411,40 @@ function renderStoryReady() {
   $("sel-sdeck").innerHTML = decks.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
   if (decks.some(d => d.id === s.deck)) $("sel-sdeck").value = s.deck;
   else if (decks.length) { const sel = loadSel(); if (decks.some(d => d.id === sel.p)) $("sel-sdeck").value = sel.p; }
-  $("btn-sbattle").disabled = decks.length === 0;
+  const must = storyMust(chap);
+  $("sready-must").innerHTML = must.names.length
+    ? `🔒 このお話では「${must.names.map(esc).join("」「")}」をデッキにかならず入れます(固定)。` : "";
   $("sready-msg").textContent = decks.length === 0
     ? "通常カード10枚そろったデッキがありません。「デッキを作る・直す」からデッキを作ってください。" : "";
   drawStoryDeck();
 }
+// その話で「かならず入れるカード」(story.js の must)。ids: 見つかったカード / missing: カードがない名前
+function storyMust(chap) {
+  const names = (chap && Array.isArray(chap.must)) ? chap.must : [];
+  const normals = loadCards().filter(c => !isPower(c));
+  const ids = [], missing = [];
+  names.forEach(n => { const c = normals.find(x => sameName(x.name, n)); if (c) ids.push(c.id); else missing.push(n); });
+  return { names, ids, missing };
+}
+// えらんだデッキで、このお話に出られるか(出られないときは理由の文字)
+function storyDeckProblem(d) {
+  const must = storyMust(storyList()[SS.ch]);
+  if (must.missing.length) return `「${must.missing.join("」「")}」のカードがありません。「カード作成」で、この名前のカードを作ってください。`;
+  if (!d) return "デッキをえらんでください。";
+  const lack = must.ids.filter(id => !d.ids.includes(id)).map(id => loadCards().find(c => c.id === id).name);
+  if (lack.length) return `このデッキには「${lack.join("」「")}」が入っていません。「デッキを作る・直す」で入れてください(自動で入ります)。`;
+  return "";
+}
 function drawStoryDeck() {
   const d = loadDecks().find(x => x.id === $("sel-sdeck").value);
-  $("sready-cards").innerHTML = d ? deckCards(d).map(c => cardHTML(c)).join("") : "";
+  const lockIds = storyMust(storyList()[SS.ch]).ids;
+  $("sready-cards").innerHTML = d ? deckCards(d).map(c =>
+    `<div class="cardwrap">${cardHTML(c)}${lockIds.includes(c.id) ? '<div class="lock">🔒固定</div>' : ""}</div>`).join("") : "";
+  const prob = loadDecks().filter(deckValid).length ? storyDeckProblem(d) : "";
+  $("sready-must").classList.toggle("bad", !!prob);
+  if (prob) $("sready-msg").textContent = prob;
+  else if (loadDecks().filter(deckValid).length) $("sready-msg").textContent = "";
+  $("btn-sbattle").disabled = !d || !!prob;
 }
 $("sel-sdeck").addEventListener("change", drawStoryDeck);
 $("btn-sdeck-edit").onclick = () => openDeckScreen("sready");
