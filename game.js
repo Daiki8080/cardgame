@@ -4,7 +4,7 @@
 //  このファイルにゲームのすべての動きが書いてあります。
 //  ① 設定とデータ  ② 保存  ③ カード表示  ④ 画面切り替え  ⑤ カード作成
 //  ⑥ デッキ編成  ⑦ 対戦準備  ⑧ バトルのルール  ⑨ エフェクト
-//  ⑩ CPU  ⑪ バトル画面の操作
+//  ⑩ CPU  ⑪ バトル画面の操作  ⑫ ストーリーモード  ⑬ バックアップ
 // ============================================================
 
 // ---------- ① 設定とデータ ----------
@@ -95,11 +95,74 @@ function normSkill(s) {
 const isPower = c => c.kind === "power";
 
 // ---------- ② 保存(スマホのブラウザの中に保存されます) ----------
+// カードは画像が大きいので、たくさん入る「IndexedDB」という保存場所に入れる
+// (前は localStorage でしたが、5MBくらいでいっぱいになってしまうため)
+// ゲーム中は CARDS_STR(文字の形)におぼえておき、保存は裏で IndexedDB に書く
+let CARDS_STR = null;
+let cardDB = null;
+function openCardDB() {
+  return new Promise(res => {
+    try {
+      const rq = indexedDB.open("cardbattle", 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore("kv");
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+}
+function dbGet(key) {
+  return new Promise(res => {
+    try {
+      const rq = cardDB.transaction("kv").objectStore("kv").get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => res(undefined);
+    } catch (e) { res(undefined); }
+  });
+}
+function dbPut(key, val) {
+  return new Promise(res => {
+    try {
+      const tx = cardDB.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(val, key);
+      tx.oncomplete = () => res(true);
+      tx.onerror = tx.onabort = () => res(false);
+    } catch (e) { res(false); }
+  });
+}
+// ゲームを開いたときに1回だけ:IndexedDB からカードを読む。
+// まだ localStorage にカードが残っていたら、IndexedDB へ引っ越して、localStorage を空ける
+async function initStorage() {
+  cardDB = await openCardDB();
+  if (!cardDB) return;   // 使えないブラウザでは、今まで通り localStorage を使う
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* なくてもOK */ }
+  const saved = await dbGet("cb_cards");
+  const old = localStorage.getItem("cb_cards");
+  if (typeof saved === "string") {
+    CARDS_STR = saved;
+    if (old) localStorage.removeItem("cb_cards");
+  } else if (old) {
+    if (await dbPut("cb_cards", old)) { CARDS_STR = old; localStorage.removeItem("cb_cards"); }
+  } else {
+    CARDS_STR = "[]";
+  }
+}
 function loadCards() {
-  try { return JSON.parse(localStorage.getItem("cb_cards")) || []; } catch (e) { return []; }
+  try { return JSON.parse(CARDS_STR !== null ? CARDS_STR : localStorage.getItem("cb_cards")) || []; } catch (e) { return []; }
 }
 function saveCards(list) {
-  try { localStorage.setItem("cb_cards", JSON.stringify(list)); return true; }
+  const str = JSON.stringify(list);
+  if (cardDB) {
+    const before = CARDS_STR;
+    CARDS_STR = str;
+    dbPut("cb_cards", str).then(ok => {
+      if (ok) return;
+      CARDS_STR = before;
+      alert("保存できませんでした(スマホの空き容量が足りないかもしれません)。");
+      updateTitle();
+    });
+    return true;
+  }
+  try { localStorage.setItem("cb_cards", str); return true; }
   catch (e) { alert("保存できませんでした(容量不足かもしれません)。不要なカードを削除してください。"); return false; }
 }
 // デッキは [{ id, name, ids:[カードの番号...] }, ...] の形で、いくつでも保存できる
@@ -330,6 +393,9 @@ function show(name) {
   if (name === "create") resetCreateForm();
   if (name === "deck") renderDeckManage();
   if (name === "ready") renderReady();
+  if (name === "story") renderStoryMenu();
+  if (name === "backup") renderBackup();
+  if (name === "sready") renderStoryReady();
   window.scrollTo(0, 0);
 }
 function updateTitle() {
@@ -339,7 +405,15 @@ document.querySelectorAll("[data-go]").forEach(b => {
   b.addEventListener("click", () => show(b.dataset.go));
 });
 $("btn-create").onclick = () => show("create");
-$("btn-deck").onclick = () => show("deck");
+// デッキ編成の「もどる」ボタンは、来た画面にもどる(タイトル or ストーリーのカード選択)
+let deckReturn = "title";
+function openDeckScreen(from) {
+  deckReturn = from;
+  $("btn-deck-back").textContent = from === "sready" ? "カード選択にもどる" : "タイトルへ戻る";
+  show("deck");
+}
+$("btn-deck").onclick = () => openDeckScreen("title");
+$("btn-deck-back").onclick = () => show(deckReturn);
 $("btn-start").onclick = () => show("ready");
 $("btn-again").onclick = () => startBattle();
 
@@ -857,7 +931,7 @@ function shuffle(a) {
 function isPvp() { return !!G && G.mode === "pvp"; }
 function who(side) {
   if (isPvp()) return side === G.player ? "プレイヤー1" : "プレイヤー2";
-  return side === G.player ? "あなた" : "CPU";
+  return side === G.player ? "あなた" : (G.enemyName || "CPU");
 }
 function isAI(side) { return !isPvp() && side === G.cpu; }       // CPUが動かしている側か
 function sideOf(name) { return name === "player" ? G.player : G.cpu; }
@@ -924,24 +998,29 @@ function buildSide(charDatas) {
   return side;
 }
 
-async function startBattle() {
+// storyMode=true なら、ストーリーモードのバトル(あいては story.js で決めたもの)
+async function startBattle(storyMode) {
   battleSeq++;                       // 前のバトルが動いていたら止める
   const sel = loadSel();
   const decks = loadDecks();
-  const pd = decks.find(d => d.id === sel.p);
+  const chap = storyMode ? storyList()[SS.ch] : null;
+  const pd = decks.find(d => d.id === (chap ? loadStory().deck : sel.p));
   const pChars = pd && deckValid(pd) ? deckCards(pd) : [];
   if (pChars.length === 0) {
     alert("デッキをえらんでください(通常カード10枚そろったデッキが必要です)。");
-    show("ready");
+    show(chap ? "sready" : "ready");
     return;
   }
   let cChars = CPU_CARDS.concat(CPU_POWERS);   // 「おまかせ」ならゲームのデッキ
-  if (sel.c && sel.c !== "auto") {
-    const cd = decks.find(d => d.id === sel.c);
+  const cName = chap ? (chap.enemy && chap.enemy.deck) : sel.c;
+  if (cName && cName !== "auto") {
+    // ふつうの対戦はデッキの番号、ストーリーはデッキの名前でさがす
+    const cd = decks.find(d => chap ? d.name === cName : d.id === cName);
     if (cd && deckValid(cd)) cChars = deckCards(cd);
   }
   G = { player: buildSide(pChars), cpu: buildSide(cChars), turn: "player", busy: true, over: false, log: [], acting: null, first: "player",
-        mode: sel.m === "pvp" ? "pvp" : "cpu", live: false };
+        mode: !chap && sel.m === "pvp" ? "pvp" : "cpu", live: false,
+        story: !!chap, enemyName: chap && chap.enemy && chap.enemy.name ? chap.enemy.name : "" };
   T = null;
   show("battle");
   $("screen-battle").classList.toggle("pvp", G.mode === "pvp");   // 2人対戦は、上下向かい合わせの画面
@@ -1356,8 +1435,12 @@ function finishGame(playerWon) {
   T = null;
   addLog(playerWon ? "あなたの勝ち!" : "あなたの負け…");
   render();
+  if (G.story && playerWon) saveStory({ ch: SS.ch + 1 });   // 勝ったら、次の話へ進んだことを保存
+  const story = G.story;
   setTimeout(() => {
     $("result-title").textContent = playerWon ? "🎉 勝利!" : "😢 敗北…";
+    if (story) showStoryResult(playerWon ? "win" : "lose");
+    else showStoryResult("");
     show("result");
   }, 1500);
 }
@@ -1623,7 +1706,7 @@ function render() {
   const pvp = isPvp();
   const handScroll = $("p-hand").scrollLeft;   // 手札のスクロール位置をおぼえておく
   const handScroll2 = $("c-hand").scrollLeft;
-  $("c-info").innerHTML = infoHTML(G.cpu, pvp ? "P2" : "CPU", true, "cpu");
+  $("c-info").innerHTML = infoHTML(G.cpu, pvp ? "P2" : esc(G.enemyName || "CPU"), true, "cpu");
   $("p-info").innerHTML = infoHTML(G.player, "あなた", false, "player");
   $("c-field").innerHTML = fieldHTML(G.cpu.field);
   $("p-field").innerHTML = fieldHTML(G.player.field);
@@ -1642,7 +1725,7 @@ function render() {
   if (G.over) label = "バトル終了";
   else if (T) label = "👆 " + T.prompt;
   else if (pvp) label = "▶ " + who(me()) + "のターン";
-  else label = G.turn === "player" ? "▶ あなたのターン" : "CPUのターン…";
+  else label = G.turn === "player" ? "▶ あなたのターン" : who(G.cpu) + "のターン…";
   $("turn-label").textContent = label;
   $("log").innerHTML = G.log.slice(-3).map(t => `<div>${esc(t)}</div>`).join("");   // 最新の3行
   $("btn-end").disabled = G.over || G.busy || !humanTurn() || !!T;
@@ -1906,6 +1989,287 @@ $("btn-quit").onclick = () => {
   }
 };
 
+// ---------- ⑫ ストーリーモード ----------
+// お話のデータは story.js に書いてあります(STORY と STORY_ENDING)
+// 進み具合は { ch: いま何話目か(0から), deck: 使うデッキの番号 } の形で保存
+const SS = { ch: 0, lines: [], i: 0, after: null, typing: false, timer: 0, full: "" };
+function storyList() { return typeof STORY !== "undefined" && Array.isArray(STORY) ? STORY : []; }
+function storyChars() { return typeof STORY_CHARS !== "undefined" && STORY_CHARS ? STORY_CHARS : {}; }
+// 表情の画像を先に読みこんでおく(切りかえのときに、ちらつかないように)
+Object.values(storyChars()).forEach(c => Object.values(c).forEach(src => { const im = new Image(); im.src = src; }));
+function storyEnding() { return typeof STORY_ENDING !== "undefined" && Array.isArray(STORY_ENDING) ? STORY_ENDING : []; }
+function loadStory() {
+  try { return JSON.parse(localStorage.getItem("cb_story")) || {}; } catch (e) { return {}; }
+}
+function saveStory(patch) {
+  try { localStorage.setItem("cb_story", JSON.stringify(Object.assign(loadStory(), patch))); } catch (e) { /* 保存できなくても遊べる */ }
+}
+const hasStorySave = () => typeof loadStory().ch === "number";
+
+// 「はじめから / つづきから」の画面
+function renderStoryMenu() {
+  const s = loadStory(), list = storyList();
+  const cont = $("btn-story-cont");
+  if (!hasStorySave()) {
+    $("story-info").textContent = "はじめて遊ぶときは「はじめから」をえらんでください。";
+    cont.disabled = true;
+  } else if (s.ch >= list.length) {
+    $("story-info").textContent = "ストーリーはクリアずみです!(つづきからで、エンディングをもう一度見られます)";
+    cont.disabled = false;
+  } else {
+    $("story-info").textContent = `つづき:${list[s.ch].title || "第" + (s.ch + 1) + "話"}`;
+    cont.disabled = false;
+  }
+}
+$("btn-story").onclick = () => show("story");
+$("btn-story-new").onclick = () => {
+  if (storyList().length === 0) { alert("お話のデータ(story.js)が見つかりません。"); return; }
+  if (hasStorySave() && !confirm("はじめからにすると、いまの進み具合は消えます。よろしいですか?")) return;
+  saveStory({ ch: 0 });
+  startChapter(0);
+};
+$("btn-story-cont").onclick = () => {
+  const s = loadStory();
+  if (s.ch >= storyList().length) playEnding();
+  else startChapter(s.ch);
+};
+
+// その話を始める(会話 → カード選択)
+function startChapter(i) {
+  const chap = storyList()[i];
+  if (!chap) { playEnding(); return; }
+  SS.ch = i;
+  playTalk(chap.talk || [], chap.title || `第${i + 1}話`, () => show("sready"));
+}
+function playEnding() {
+  SS.ch = storyList().length;
+  playTalk(storyEnding(), "エンディング", () => {
+    $("result-title").textContent = "🏆 ストーリークリア!";
+    showStoryResult("clear");
+    show("result");
+  });
+}
+
+// ----- 会話 -----
+// 名前が、作ったカードの名前と同じなら、そのカードのイラストを出す
+function speakerCard(name) {
+  if (!name) return null;
+  const cards = loadCards().filter(c => c.name === name);
+  return cards.find(c => !isPower(c)) || cards[0] || null;
+}
+function playTalk(lines, title, after) {
+  SS.lines = lines; SS.i = -1; SS.after = after;
+  clearInterval(SS.timer); SS.typing = false;
+  $("talk-name").textContent = ""; $("talk-text").textContent = "";
+  $("talk-portrait").innerHTML = ""; $("talk-portrait").className = "";
+  $("talk-box").classList.add("hidden");
+  show("talk");
+  // さいしょに話のタイトルを出す(タップ or 少し待つと消える)
+  const tc = $("talk-chapter");
+  $("talk-chapter-title").textContent = title;
+  tc.classList.add("show");
+  SS.intro = true;
+  clearTimeout(SS.introTimer);
+  SS.introTimer = setTimeout(endIntro, 1800);
+}
+function endIntro() {
+  if (!SS.intro) return;
+  SS.intro = false;
+  clearTimeout(SS.introTimer);
+  $("talk-chapter").classList.remove("show");
+  $("talk-box").classList.remove("hidden");
+  nextLine();
+}
+function nextLine() {
+  SS.i++;
+  if (SS.i >= SS.lines.length) { finishTalk(); return; }
+  const line = SS.lines[SS.i];
+  const name = Array.isArray(line) ? (line[0] || "") : (line.who || "");
+  const text = String(Array.isArray(line) ? (line[1] || "") : (line.text || ""));
+  // 名前とイラスト
+  $("talk-name").textContent = name;
+  $("talk-name").classList.toggle("hidden", !name);
+  $("talk-box").classList.toggle("narration", !name);
+  const pt = $("talk-portrait");
+  const mood = Array.isArray(line) ? (line[2] || "") : (line.face || "");
+  const chara = storyChars()[name];   // story.js の STORY_CHARS にいるキャラ(表情つき)
+  const card = chara ? null : speakerCard(name);
+  const hasArt = !!chara || !!(card && (card.full || card.img || card.emoji));
+  if (name && hasArt) {
+    const key = chara ? "chara:" + name : card ? card.id : "none:" + name;
+    if (pt.dataset.key !== key) {   // ちがうキャラになったら、下からふわっと出す
+      pt.dataset.key = key;
+      const src = card ? (card.full || card.img) : "";
+      pt.innerHTML = chara ? '<img class="chara" alt="">' : src ? `<img src="${src}" alt="">` : card && card.emoji ? `<div class="emoji">${card.emoji}</div>` : "";
+      pt.classList.remove("in"); void pt.offsetWidth; pt.classList.add("in");
+    }
+    // 表情を切りかえる(同じキャラなら、絵だけ入れかえる)
+    if (chara) pt.querySelector("img").src = chara[mood] || chara["通常"] || Object.values(chara)[0];
+    pt.classList.remove("dim");
+  } else {
+    pt.classList.add("dim");   // ナレーションや、絵のない人が話しているときは、前のイラストを暗くする
+  }
+  // 1文字ずつ表示
+  SS.full = text;
+  const el = $("talk-text");
+  el.textContent = "";
+  $("talk-next").classList.remove("on");
+  SS.typing = true;
+  let n = 0;
+  clearInterval(SS.timer);
+  SS.timer = setInterval(() => {
+    n++;
+    el.textContent = text.slice(0, n);
+    if (n >= text.length) stopTyping();
+  }, 35);
+}
+function stopTyping() {
+  clearInterval(SS.timer);
+  SS.typing = false;
+  $("talk-text").textContent = SS.full;
+  $("talk-next").classList.add("on");
+}
+function finishTalk() {
+  clearInterval(SS.timer);
+  const f = SS.after; SS.after = null;
+  if (f) f();
+}
+// 画面のどこをタップしても進む(文字を表示中なら、まず全部出す)
+$("screen-talk").addEventListener("click", e => {
+  if (e.target.closest("#talk-skip")) return;
+  if (SS.intro) { endIntro(); return; }
+  if (SS.typing) { stopTyping(); return; }
+  nextLine();
+});
+$("talk-skip").onclick = () => {
+  if (confirm("会話をスキップしますか?")) { SS.intro = false; clearTimeout(SS.introTimer); finishTalk(); }
+};
+
+// ----- カード選択(デッキをえらぶ) -----
+function renderStoryReady() {
+  const chap = storyList()[SS.ch] || {};
+  $("sready-title").textContent = chap.title || `第${SS.ch + 1}話`;
+  $("sready-enemy").textContent = (chap.enemy && chap.enemy.name) || "CPU";
+  const decks = loadDecks().filter(deckValid);
+  const s = loadStory();
+  $("sel-sdeck").innerHTML = decks.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join("");
+  if (decks.some(d => d.id === s.deck)) $("sel-sdeck").value = s.deck;
+  else if (decks.length) { const sel = loadSel(); if (decks.some(d => d.id === sel.p)) $("sel-sdeck").value = sel.p; }
+  $("btn-sbattle").disabled = decks.length === 0;
+  $("sready-msg").textContent = decks.length === 0
+    ? "通常カード10枚そろったデッキがありません。「デッキを作る・直す」からデッキを作ってください。" : "";
+  drawStoryDeck();
+}
+function drawStoryDeck() {
+  const d = loadDecks().find(x => x.id === $("sel-sdeck").value);
+  $("sready-cards").innerHTML = d ? deckCards(d).map(c => cardHTML(c)).join("") : "";
+}
+$("sel-sdeck").addEventListener("change", drawStoryDeck);
+$("btn-sdeck-edit").onclick = () => openDeckScreen("sready");
+$("btn-sbattle").onclick = () => {
+  saveStory({ deck: $("sel-sdeck").value });
+  startBattle(true);
+};
+
+// ----- 勝敗画面のボタン -----
+// kind: "win" 勝った / "lose" 負けた / "clear" ストーリークリア / "" ふつうの対戦
+function showStoryResult(kind) {
+  $("result-normal").classList.toggle("hidden", !!kind);
+  $("result-story").classList.toggle("hidden", !kind);
+  $("btn-s-next").classList.toggle("hidden", kind !== "win");
+  $("btn-s-retry").classList.toggle("hidden", kind !== "lose");
+  $("result-story-msg").textContent =
+    kind === "win" ? "つづきは保存されました。" :
+    kind === "lose" ? "デッキを見直して、もう一度ちょうせんしよう!" :
+    kind === "clear" ? "すべてのお話をクリアしました!" : "";
+}
+$("btn-s-next").onclick = () => startChapter(SS.ch + 1);
+$("btn-s-retry").onclick = () => show("sready");
+
+// ---------- ⑬ バックアップ(書き出し・読みこみ) ----------
+// カード・デッキ・前回えらんだデッキ・ストーリーの進み具合を、1つのファイル(.json)にまとめる
+let importData = null;
+function renderBackup() {
+  $("backup-info").textContent = `いまのデータ:カード${loadCards().length}枚 / デッキ${loadDecks().length}個`;
+  $("f-import").value = "";
+  $("import-box").classList.add("hidden");
+  importData = null;
+}
+$("btn-backup").onclick = () => show("backup");
+
+$("btn-export").onclick = async () => {
+  const data = { app: "illust-card-battle", version: 1, date: new Date().toISOString(),
+    cards: loadCards(), decks: loadDecks(), sel: loadSel(), story: loadStory() };
+  const d = new Date();
+  const p2 = n => String(n).padStart(2, "0");
+  const name = `cardbattle-backup-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.json`;
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  // スマホでは「共有」の画面を出す(「"ファイル"に保存」をえらべる)。できないときは、ふつうのダウンロード
+  try {
+    const file = new File([blob], name, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "カードバトルのバックアップ" });
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return;   // 共有をキャンセルしたとき
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+};
+
+$("f-import").addEventListener("change", () => {
+  const f = $("f-import").files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const data = JSON.parse(rd.result);
+      if (!data || !Array.isArray(data.cards)) throw new Error("bad");
+      importData = data;
+      const when = data.date ? new Date(data.date).toLocaleString("ja-JP") : "不明";
+      $("import-info").textContent = `このバックアップ:カード${data.cards.length}枚 / デッキ${(data.decks || []).length}個(${when} に書き出し)`;
+      $("import-box").classList.remove("hidden");
+    } catch (e) {
+      importData = null;
+      $("import-box").classList.add("hidden");
+      alert("このファイルは読みこめませんでした。書き出したバックアップのファイルをえらんでください。");
+    }
+  };
+  rd.readAsText(f);
+});
+
+// 同じ番号(id)のものは、バックアップの内容で上書きして、あとは足す
+function mergeById(now, add) {
+  const list = now.slice();
+  add.forEach(x => {
+    const i = list.findIndex(y => y.id === x.id);
+    if (i >= 0) list[i] = x; else list.push(x);
+  });
+  return list;
+}
+function finishImport(cards, decks, sel, story) {
+  if (!saveCards(cards)) return;
+  saveDecks(decks);
+  if (sel) saveSel(sel);
+  if (story) { try { localStorage.setItem("cb_story", JSON.stringify(story)); } catch (e) { /* なくてもOK */ } }
+  alert(`読みこみました!(カード${cards.length}枚 / デッキ${decks.length}個)`);
+  renderBackup();
+}
+$("btn-import-add").onclick = () => {
+  if (!importData) return;
+  finishImport(mergeById(loadCards(), importData.cards), mergeById(loadDecks(), importData.decks || []), null, null);
+};
+$("btn-import-replace").onclick = () => {
+  if (!importData) return;
+  if (!confirm("今のカード・デッキはすべて消えて、バックアップの内容になります。よろしいですか?")) return;
+  finishImport(importData.cards, importData.decks || [], importData.sel || {}, importData.story || null);
+};
+
 document.body.dataset.theme = "royal";   // デザインは ROYAL(ネイビー × ゴールド)
 
 updateTitle();
+initStorage().then(updateTitle);   // カードを読みこんだら、タイトルの枚数を表示しなおす

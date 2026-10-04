@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -19,12 +19,75 @@
     <div class="logo-line"></div>
     <p class="note" style="margin-top:-6px">イラストカードバトル</p>
     <p id="title-info" class="note"></p>
+    <button id="btn-story" class="btn">ストーリーモード</button>
     <button id="btn-start" class="btn">ゲーム開始</button>
     <button id="btn-create" class="btn">カード作成</button>
     <button id="btn-deck" class="btn">デッキ編成</button>
+    <button id="btn-backup" class="btn ghost">バックアップ</button>
 
 
   </div>
+</section>
+
+<!-- ===== バックアップ(書き出し・読みこみ) ===== -->
+<section id="screen-backup" class="screen">
+  <h2>バックアップ</h2>
+  <p id="backup-info" class="note"></p>
+
+  <h3>書き出す(保存する)</h3>
+  <p class="note">作ったカード・デッキ・ストーリーの進み具合を、1つのファイルにして保存します。「ファイル」アプリやiCloud Driveに保存しておくと安心です。</p>
+  <button id="btn-export" class="btn">バックアップを書き出す</button>
+
+  <h3>読みこむ(もとにもどす)</h3>
+  <p class="note">前に書き出したバックアップのファイル(.json)をえらんでください。</p>
+  <input type="file" id="f-import" accept=".json,application/json">
+  <div id="import-box" class="hidden power-box">
+    <p id="import-info" class="msg"></p>
+    <button id="btn-import-add" class="btn">今のデータに追加する</button>
+    <p class="note">同じカードがあるときは、バックアップの内容で上書きします。今のデータは消えません。</p>
+    <button id="btn-import-replace" class="btn danger">今のデータと入れかえる</button>
+    <p class="note">今のカード・デッキはすべて消えて、バックアップの内容になります。</p>
+  </div>
+
+  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+</section>
+
+<!-- ===== ストーリーモード(はじめから / つづきから) ===== -->
+<section id="screen-story" class="screen">
+  <div class="center-box">
+    <div class="logo-sub">ILLUSTRATED CARD BATTLE</div>
+    <h1 class="logo">STORY MODE</h1>
+    <div class="logo-line"></div>
+    <p id="story-info" class="note"></p>
+    <button id="btn-story-new" class="btn">はじめから</button>
+    <button id="btn-story-cont" class="btn">つづきから</button>
+    <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+  </div>
+</section>
+
+<!-- ===== ストーリーの会話 ===== -->
+<section id="screen-talk" class="screen">
+  <div id="talk-top"><button id="talk-skip" class="btn small ghost">スキップ ▶▶</button></div>
+  <div id="talk-stage"><div id="talk-portrait"></div></div>
+  <div id="talk-box">
+    <div id="talk-name"></div>
+    <div id="talk-text"></div>
+    <div id="talk-next">▼</div>
+  </div>
+  <div id="talk-chapter"><div class="tc-sub">STORY</div><div id="talk-chapter-title"></div><div class="tc-line"></div></div>
+</section>
+
+<!-- ===== ストーリーのカード選択(デッキをえらぶ) ===== -->
+<section id="screen-sready" class="screen">
+  <h2 id="sready-title"></h2>
+  <p class="note">対戦あいて:<b id="sready-enemy"></b></p>
+  <label>使うデッキ</label>
+  <select id="sel-sdeck"></select>
+  <div id="sready-cards"></div>
+  <p id="sready-msg" class="note"></p>
+  <button id="btn-sbattle" class="btn">バトル開始</button>
+  <button id="btn-sdeck-edit" class="btn ghost">デッキを作る・直す</button>
+  <button class="btn ghost" data-go="title">タイトルへ戻る</button>
 </section>
 
 <!-- ===== 対戦準備画面(デッキをえらぶ) ===== -->
@@ -148,7 +211,7 @@
     <p class="note">デッキはいくつでも作れます。1つのデッキは、通常カード10枚です(パワーアップカードは、通常カードと合わせて1枚の扱い)。</p>
     <div id="deck-rows"></div>
     <button id="btn-new-deck" class="btn">＋ 新しいデッキを作る</button>
-    <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+    <button id="btn-deck-back" class="btn ghost">タイトルへ戻る</button>
   </div>
 
   <!-- デッキをつくる・直す -->
@@ -188,9 +251,17 @@
 <section id="screen-result" class="screen">
   <div class="center-box">
     <h1 id="result-title"></h1>
-    <button id="btn-again" class="btn">もう一度遊ぶ</button>
-    <button class="btn ghost" data-go="ready">デッキをえらび直す</button>
-    <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+    <div id="result-normal">
+      <button id="btn-again" class="btn">もう一度遊ぶ</button>
+      <button class="btn ghost" data-go="ready">デッキをえらび直す</button>
+      <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+    </div>
+    <div id="result-story" class="hidden">
+      <p id="result-story-msg" class="note"></p>
+      <button id="btn-s-next" class="btn">つづきへ</button>
+      <button id="btn-s-retry" class="btn">もう一度(カード選択へ)</button>
+      <button class="btn ghost" data-go="title">タイトルへ戻る</button>
+    </div>
   </div>
 </section>
 
@@ -234,6 +305,7 @@
   </div>
 </div>
 
-<script src="game.js?v=13"></script>
+<script src="story.js?v=17"></script>
+<script src="game.js?v=17"></script>
 </body>
 </html>

@@ -833,3 +833,58 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 #detail-close { width: auto; padding: 8px 16px; }
 #detail-close2 { width: 100%; }
 #detail-text { min-height: 6em; }
+
+/* =====================================================
+   ストーリーモード
+   ===================================================== */
+/* 会話の画面:上にイラスト、下にメッセージの枠 */
+#screen-talk.active { display: flex; flex-direction: column; height: 100dvh; padding: 12px; position: relative; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#talk-top { display: flex; justify-content: flex-end; position: relative; z-index: 3; }
+#talk-skip { width: auto; padding: 6px 12px; font-size: 12px; }
+#talk-stage { flex: 1; min-height: 0; display: flex; align-items: flex-end; justify-content: center; padding: 8px 0 0; }
+#talk-portrait { height: 100%; max-height: 62dvh; display: flex; align-items: flex-end; justify-content: center; transition: filter .3s, opacity .3s; }
+#talk-portrait img { max-height: 100%; max-width: 92vw; object-fit: contain; border-radius: 10px;
+  border: 1px solid var(--panel-line); box-shadow: 0 0 30px rgba(230,192,104,.18), 0 10px 30px rgba(0,0,0,.5); }
+#talk-portrait .emoji { font-size: 120px; line-height: 1; }
+#talk-portrait.dim { filter: brightness(.45); }
+#talk-portrait.in { animation: talkIn .4s ease-out; }
+@keyframes talkIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+#talk-box { position: relative; min-height: 132px; margin-top: 10px; padding: 22px 16px 26px;
+  background: linear-gradient(180deg, rgba(20,26,58,.96), rgba(8,11,28,.96));
+  border: 1px solid var(--accent); border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(230,192,104,.12), 0 8px 30px rgba(0,0,0,.6); }
+#talk-name { position: absolute; top: -14px; left: 14px; padding: 4px 14px; font-weight: bold; font-size: 14px; letter-spacing: .08em;
+  font-family: var(--font-display); color: var(--btn-ink); background: var(--btn-grad); border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+#talk-text { font-size: 17px; line-height: 1.7; white-space: pre-wrap; min-height: 3.4em; }
+#talk-box.narration #talk-text { color: var(--muted); text-align: center; font-family: var(--font-display); }
+#talk-next { position: absolute; right: 14px; bottom: 6px; color: var(--accent); font-size: 14px; opacity: 0; }
+#talk-next.on { opacity: 1; animation: talkNext 1s ease-in-out infinite; }
+@keyframes talkNext { 0%,100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+
+/* 話のタイトル(会話の最初に出る) */
+#talk-chapter { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(120% 70% at 50% 50%, rgba(38,48,106,.95), rgba(8,11,28,.98)); z-index: 2;
+  opacity: 0; pointer-events: none; transition: opacity .5s; }
+#talk-chapter.show { opacity: 1; pointer-events: auto; }
+#talk-chapter .tc-sub { font-family: var(--font-display); font-size: 12px; letter-spacing: .5em; color: var(--accent); }
+#talk-chapter-title { margin-top: 10px; padding: 0 20px; text-align: center; font-family: var(--font-display); font-size: 26px; font-weight: bold; letter-spacing: .08em;
+  background: linear-gradient(180deg, #fff 0%, var(--accent) 60%, var(--accent-2) 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+#talk-chapter .tc-line { width: 140px; height: 1px; margin-top: 14px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+#talk-chapter.show #talk-chapter-title { animation: talkIn .7s ease-out; }
+
+/* カード選択:えらんだデッキのカードを並べて見せる */
+#sready-cards { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 12px 0; }
+#result-story-msg { margin-bottom: 6px; }
+
+/* 会話のキャラ(背景が透明なイラスト):メッセージ枠のうしろから、上半身が出ているように見せる */
+#talk-stage { margin-bottom: -46px; }
+#talk-box { z-index: 2; }
+#talk-portrait img.chara { height: 100%; max-width: 96vw; border: none; border-radius: 0; box-shadow: none;
+  filter: drop-shadow(0 0 18px rgba(230,192,104,.25)) drop-shadow(0 8px 16px rgba(0,0,0,.5)); }
+
+/* バックアップ */
+#import-info { font-size: 14px; line-height: 1.5; margin: 10px 0 4px; }
+#screen-backup h3 { margin: 22px 0 4px; }
