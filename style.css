@@ -1035,3 +1035,34 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 .topbar { position: sticky; top: 0; z-index: 20; display: flex; justify-content: flex-start; margin: -16px -16px 8px; padding: 8px 12px;
   background: linear-gradient(180deg, var(--bg1) 70%, rgba(8,11,28,0)); }
 .topbar .btn { width: auto; padding: 6px 12px; font-size: 13px; }
+
+/* ===== スタン技 ===== */
+.k-stun    { --rib: linear-gradient(180deg, #f2c81f, #9a7a05); }
+.k-stunall { --rib: linear-gradient(180deg, #e8a51a, #8a5a00); }
+
+/* スタン中のカード:ブルブル痙攣して、黄色い電気がピリピリ走る */
+.card.stun { animation: stunShake .32s linear infinite; border-color: #ffe14a;
+  box-shadow: 0 0 8px 2px rgba(255,225,60,.85), 0 0 18px rgba(255,200,0,.5); }
+@keyframes stunShake {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  15%  { transform: translate(-1.5px, .5px) rotate(-1deg); }
+  30%  { transform: translate(1.5px, -.5px) rotate(1deg); }
+  45%  { transform: translate(-1px, -1px) rotate(-.5deg); }
+  60%  { transform: translate(1px, 1px) rotate(.6deg); }
+  75%  { transform: translate(-1.5px, 0) rotate(-1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+.stunfx { position: absolute; inset: 0; z-index: 4; pointer-events: none; border-radius: inherit; overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, rgba(255,240,120,.18), rgba(255,220,0,0) 70%); }
+.stunfx svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stunfx polyline { fill: none; stroke: #fff36b; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round;
+  filter: drop-shadow(0 0 2px #ffd400) drop-shadow(0 0 4px #ffb000); opacity: 0; animation: zapFlick 0.9s steps(1) infinite; }
+.stunfx .z2 { animation-delay: .22s; }
+.stunfx .z3 { animation-delay: .45s; }
+.stunfx .z4 { animation-delay: .67s; }
+@keyframes zapFlick { 0% { opacity: 1; } 12% { opacity: .2; } 20% { opacity: 1; } 32% { opacity: 0; } 100% { opacity: 0; } }
+.stunfx span { position: absolute; left: 50%; top: 13%; transform: translate(-50%, -50%) rotate(-8deg); white-space: nowrap;
+  font-size: 9.5px; font-weight: 900; letter-spacing: .06em; color: #2a2000; padding: 0 5px; border-radius: 5px;
+  background: linear-gradient(180deg, #fff59a, #ffd000); border: 1.5px solid #fff;
+  box-shadow: 0 0 8px #ffd000, 0 2px 4px rgba(0,0,0,.5); animation: stunLabel .6s ease-in-out infinite alternate; }
+@keyframes stunLabel { from { transform: translate(-50%, -50%) rotate(-8deg) scale(1); } to { transform: translate(-50%, -50%) rotate(-8deg) scale(1.08); } }

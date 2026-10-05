@@ -242,6 +242,8 @@ function skillShort(sk, m) {
   if (sk.type === "all") return `💎${c} 🌪${sk.dmg * mm}`;
   if (sk.type === "sacrifice") return `💎${c} 🔥${sk.dmg * mm}/${sk.self}`;
   if (sk.type === "chance") return `💎${c} 🎲${sk.dmg * mm}`;
+  if (sk.type === "stun") return `💎${c} ⚡${sk.dmg * mm}`;
+  if (sk.type === "stunall") return `💎${c} 🌩${sk.dmg * mm}`;
   return `💎${c} 💥${sk.dmg * mm}`;
 }
 // 技の くわしい説明(大きいカードに出す)
@@ -252,6 +254,8 @@ function skillDetail(sk, m) {
   if (sk.type === "all") return `全体攻撃 / 💎${c} / 💥${sk.dmg * mm}(相手全員)`;
   if (sk.type === "sacrifice") return `捨て身 / 💎${c} / 💥${sk.dmg * mm}(自分は${sk.self}ダメージ)`;
   if (sk.type === "chance") return `確率攻撃 / 💎${c} / 💥${sk.dmg * mm}(成功${sk.pct}%)`;
+  if (sk.type === "stun") return `スタン攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手1体)`;
+  if (sk.type === "stunall") return `スタン全体攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手全員)`;
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
@@ -293,6 +297,7 @@ function cardHTML(c, extra, inField) {
   if (c.amulet) cls += " amulet";
   if (c.plush) cls += " plush";
   if (c.decoy > 0) cls += " decoy";
+  if (inField && isStunned(c)) cls += " stun";
   if (G && G.acting === c.uid) cls += " acting";
   const badges = (pw ? "⬆️" : "") + (c.guard ? "🛡" : "") + (c.amulet ? "🧿" : "") + (c.plush ? "🧸" : "") + (c.decoy > 0 ? "🎭" : "");
   return `<div class="${cls}${targetable}${extra}" data-uid="${c.uid || ""}">
@@ -303,8 +308,17 @@ function cardHTML(c, extra, inField) {
     <div class="hpnum">${Math.max(0, c.hp)}</div>
     <div class="skills"><div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
     <div class="catk">②${skillShort(normSkill(c.a2), m)}</div></div>
-    ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}</div>`;
+    ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}
+    ${inField && isStunned(c) ? STUN_FX : ""}</div>`;
 }
+
+// スタン中のカードに重ねる、ピリピリ走る電気と「スタン」の文字
+const STUN_FX = `<div class="stunfx"><svg viewBox="0 0 76 106" preserveAspectRatio="none">
+  <polyline class="z1" points="6,8 20,22 12,30 30,44 22,52 40,66"/>
+  <polyline class="z2" points="70,14 54,28 62,36 44,50 52,58 34,74"/>
+  <polyline class="z3" points="8,96 24,80 16,72 36,60 30,52 48,40"/>
+  <polyline class="z4" points="68,98 56,84 64,76 50,64 58,56 42,46"/>
+</svg><span>スタン</span></div>`;
 
 // 大きいカード(タップしたときのメニューに表示)  mini=true なら並べて見られる小さめ版、
 // compact=true なら「絵が左、くわしい情報が右」のよこ向き(メニュー用。画面に収まるように)
@@ -429,6 +443,8 @@ const SKILL_FORM = {
   all:       { v1: "ダメージ" },
   sacrifice: { v1: "相手へのダメージ", v2: "自分が受けるダメージ" },
   chance:    { v1: "ダメージ", v2: "成功する確率(%)" },
+  stun:      { v1: "ダメージ" },
+  stunall:   { v1: "ダメージ" },
 };
 function updateSkillForm(p) {   // p は "a1" か "a2"
   const f = SKILL_FORM[$("f-" + p + "type").value] || SKILL_FORM.attack;
@@ -751,7 +767,7 @@ function readSkill(p, no) {
   if (type === "heal") return { type, name, cost, heal: v1 };
   if (type === "sacrifice") return { type, name, cost, dmg: v1, self: v2 };
   if (type === "chance") return { type, name, cost, dmg: v1, pct: v2 };
-  return { type, name, cost, dmg: v1 };   // 攻撃・全体攻撃
+  return { type, name, cost, dmg: v1 };   // 攻撃・全体攻撃・スタン攻撃・スタン全体攻撃
 }
 
 $("btn-save-card").onclick = () => {
@@ -1255,6 +1271,7 @@ async function coinToss() {
 
 // ターンの最初にやること(ドロー → 💎獲得 → 防御・お守り・出したばかりの解除 → 行動できるように)
 function beginTurn(side) {
+  clearStuns(foe(side));   // 相手のターンは終わったので、相手のキャラのスタンをとく
   side.turns += 1;
   const card = side.deck.shift();       // デッキが空なら何も引かない
   if (card) side.hand.push(card);
@@ -1335,6 +1352,7 @@ async function sendDown(side, ch) {
     await sleep(750);
   }
   side.field = side.field.filter(c => c !== ch);
+  ch.stunTurn = 0;
   side.down.push(ch);
   addLog(`${ch.name}はダウンした!`);
   if (ch.under) {
@@ -1360,7 +1378,8 @@ function itemBlock(side, card) {
     case "revive":
       return side.down.some(c => c.type === "char") ? "" : "ダウンしたキャラがいないので使えません";
     case "swap":
-      return side.field.some(c => !c.power) && side.hand.some(c => c.type === "char" && !c.power)
+      if (!side.field.some(c => !c.power && !isStunned(c)) && side.field.some(c => !c.power)) return "場のキャラがスタン中で交代できません";
+      return side.field.some(c => !c.power && !isStunned(c)) && side.hand.some(c => c.type === "char" && !c.power)
         ? "" : "場と手札の両方に、パワーアップ以外のキャラが必要です";
     default:
       return "";
@@ -1438,6 +1457,7 @@ async function useItem(side, card, target, target2) {
     fx(cardEl(target.uid), "swap");
     await sleep(900);
   } else if (k === "swap") {
+    if (isStunned(target)) return false;
     const idx = side.field.indexOf(target);
     side.field[idx] = target2;                         // 手札のキャラが同じ場所に入る
     side.hand = side.hand.filter(c => c !== target2);
@@ -1455,7 +1475,7 @@ async function useItem(side, card, target, target2) {
 }
 
 async function doGuard(side, ch) {
-  if (ch.acted) return false;
+  if (ch.acted || isStunned(ch)) return false;
   if (isAI(side)) { G.acting = ch.uid; render(); await wait(800); }
   ch.guard = true;
   ch.acted = true;
@@ -1470,16 +1490,32 @@ async function doGuard(side, ch) {
 // ----- キャラの技 -----
 const skillOf = (ch, n) => n === 1 ? ch.a1 : ch.a2;
 const isDmgSkill = sk => sk.type !== "heal";
-const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance";   // 相手1体をえらぶ技
+const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance" || sk.type === "stun";   // 相手1体をえらぶ技
+const isAllSkill = sk => sk.type === "all" || sk.type === "stunall";   // 相手全員への技
+
+// ----- スタン -----
+// スタンを受けたキャラは、その持ち主の「次のターン」が終わるまで動けない
+// (技・防御・交代・パワーアップができない。お守りなどのアイテムは使える)
+// stunTurn に「動けないターンの番号」を入れておく
+function isStunned(ch) { return !!ch.stunTurn; }
+function stunChar(owner, t) {
+  t.stunTurn = owner.turns + 1;
+  t.guard = false;
+}
+// 相手のターンが始まったら、自分のターンは終わっているので、スタンをとく
+function clearStuns(owner) {
+  owner.field.forEach(c => { if (c.stunTurn && c.stunTurn <= owner.turns) c.stunTurn = 0; });
+}
 
 // 技が「いま使えない理由」を返す(使えるときは空の文字)
 function skillBlock(side, ch, n) {
   const sk = skillOf(ch, n);
   const mult = isDmgSkill(sk) && ch.plush ? 2 : 1;
   const foeSide = foe(side);
+  if (isStunned(ch)) return "スタン中で動けない";
   if (ch.acted) return "行動ずみ";
   if (side.cost < sk.cost * mult) return "コスト不足";
-  if (sk.type === "all" && foeSide.field.length === 0) return "相手の場にキャラがいない";
+  if (isAllSkill(sk) && foeSide.field.length === 0) return "相手の場にキャラがいない";
   if (needsEnemy(sk) && foeSide.field.length === 0 && ch.fresh) return "出したばかりで直接攻撃できない";
   return "";
 }
@@ -1539,25 +1575,30 @@ async function doSkill(side, ch, n, target) {
   }
 
   const dmg = sk.dmg * mult;
-  if (sk.type === "all") {
+  const stun = sk.type === "stun" || sk.type === "stunall";
+  if (isAllSkill(sk)) {
     const list = foeSide.field.slice();
     const results = list.map(t => ({ t: t, r: hitChar(t, dmg, true) }));
     results.forEach(x => addLog(hitLog(x.t, x.r)));
+    // スタン全体攻撃:お守りで防いだキャラ以外は、スタン
+    if (stun) results.forEach(x => { if (!x.r.blocked && x.t.hp > 0) stunChar(foeSide, x.t); });
+    if (stun && results.some(x => isStunned(x.t))) addLog(`${results.filter(x => isStunned(x.t)).map(x => x.t.name).join("、")}はスタンした!`);
     render();
     results.forEach(x => {
       const el = cardEl(x.t.uid);
       if (x.r.blocked) { fx(el, "guard"); popAt(el, "0", "zero"); }
-      else { fx(el, "slash"); popAt(el, "-" + x.r.dmg); if (x.r.survived) fx(el, "guard"); }
+      else { fx(el, stun ? "zap" : "slash"); popAt(el, "-" + x.r.dmg); if (x.r.survived) fx(el, "guard"); }
     });
     await sleep(1000);
     for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
   } else if (target) {
     const r = hitChar(target, dmg, true);
     addLog(hitLog(target, r));
+    if (stun && !r.blocked && target.hp > 0) { stunChar(foeSide, target); addLog(`${target.name}はスタンした!`); }
     render();
     const tel = cardEl(target.uid);
     if (r.blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
-    else { fx(tel, "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
+    else { fx(tel, stun ? "zap" : "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
     await sleep(900);
     if (target.hp <= 0) await sendDown(foeSide, target);
   } else {
@@ -1591,6 +1632,7 @@ function powerBase(side, pcard) {
 function powerBlock(side, pcard) {
   if (!pcard.power) return "パワーアップカードではありません";
   if (!powerBase(side, pcard)) return `元の「${pcard.baseName}」が場にいません`;
+  if (isStunned(powerBase(side, pcard))) return `元の「${pcard.baseName}」がスタン中です`;
   if (side.cost < pcard.upCost) return "コスト不足";
   return "";
 }
@@ -1663,6 +1705,7 @@ const FX = {
   down:   { e: ["💨", "✨"], n: 6, rise: true },
   charge: { e: ["✨", "⭐", "✦"], n: 10, ring: "#ffd700" },
   power:  { e: ["✨", "⭐", "🌟", "💫", "✦", "✧"], n: 30, ring: "#ffd700", gold: true },
+  zap:    { e: ["⚡", "⚡", "✨", "💥"], n: 12, line: true, ring: "#ffe600" },
 };
 
 function cardEl(uid) {
@@ -1772,8 +1815,9 @@ function aiAction(side, ch) {
       if (!t || t.hp / t.maxHp > 0.6) return;               // あまりダメージを受けていなければ使わない
       score = Math.min(sk.heal, t.maxHp - t.hp) * 0.8;
       target = t;
-    } else if (sk.type === "all") {
+    } else if (isAllSkill(sk)) {
       score = foeSide.field.reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
+      if (sk.type === "stunall") score += foeSide.field.filter(t => !t.amulet && !isStunned(t)).length * 8;   // スタンのぶん、少し高く
     } else {
       if (sk.type === "sacrifice" && sk.self >= ch.hp) return;   // 自分がダウンしてしまう捨て身はしない
       const dmg = sk.dmg * mult;
@@ -1788,6 +1832,7 @@ function aiAction(side, ch) {
         score = dmg * 1.2;                                       // 直接攻撃
       }
       if (sk.type === "chance") score *= sk.pct / 100;
+      if (sk.type === "stun" && target && !isStunned(target) && !target.amulet) score += 10;
       if (sk.type === "sacrifice") score -= sk.self * 0.7;
     }
     if (score > 0 && (!best || score > best.score)) best = { n: n, target: target, score: score };
@@ -1831,7 +1876,7 @@ async function aiPlay(side) {
       const t = side.field.slice().sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
       if (t && side.field.length >= 2 && foeSide.field.length > 0 && !side.field.some(c => c.decoy > 0)) await useItem(side, card, t);
     } else if (k === "swap") {
-      const f = side.field.filter(c => !c.power && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
+      const f = side.field.filter(c => !c.power && !isStunned(c) && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
       const h = side.hand.filter(c => c.type === "char" && !c.power).sort((a, b) => b.maxHp - a.maxHp)[0];
       if (f && h) await useItem(side, card, f, h);
     }
@@ -1861,7 +1906,7 @@ async function aiPlay(side) {
   for (const card of side.hand.filter(c => c.type === "item" && c.kind === "plush")) {
     if (G.over) return;
     const t = side.field
-      .filter(c => !c.acted && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
+      .filter(c => !c.acted && !isStunned(c) && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
       .sort((a, b) => b.hp - a.hp)[0];
     if (t) { await useItem(side, card, t); await wait(500); }
   }
@@ -1869,7 +1914,7 @@ async function aiPlay(side) {
   // 6. 行動できるキャラで技を使う(使える技がなければ防御)
   for (const ch of side.field.slice()) {
     if (G.over) return;
-    if (ch.acted) continue;
+    if (ch.acted || isStunned(ch)) continue;   // スタン中は何もできない
     const act = aiAction(side, ch);
     if (!act) { await doGuard(side, ch); await wait(600); continue; }
     await doSkill(side, ch, act.n, act.target);
@@ -2077,7 +2122,7 @@ function itemMenu(card) {
     });
   } else if (k === "swap") {
     use("使う(対象をえらぶ)", () => {
-      const fields = p.field.filter(c => !c.power);
+      const fields = p.field.filter(c => !c.power && !isStunned(c));   // スタン中のキャラは交代できない
       const hands = p.hand.filter(c => c.type === "char" && !c.power);
       startTarget("手札に戻す(場の)キャラをタップ", fields,
         f => startTarget("場に出す(手札の)キャラをタップ", hands,
@@ -2103,7 +2148,7 @@ function skillBtnLabel(sk, n, m) {
 function fieldMenu(ch) {
   const p = me();
   const m = ch.plush ? 2 : 1;
-  let note = ch.acted ? "このターンはもう行動しました" : "";
+  let note = isStunned(ch) ? "⚡スタン中:このターンは技も防御もできません" : ch.acted ? "このターンはもう行動しました" : "";
   if (!ch.acted && ch.plush) note = "🧸次の攻撃は、💎も2倍・ダメージも2倍";
   if (!ch.acted && ch.fresh) note += (note ? " / " : "") + "出したばかりなので、直接攻撃はできません";
   const btn = n => {
@@ -2114,7 +2159,7 @@ function fieldMenu(ch) {
   };
   openMenu({ card: ch, note, buttons: [
     btn(1), btn(2),
-    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted, action: () => run(() => doGuard(p, ch)) },
+    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted || isStunned(ch), action: () => run(() => doGuard(p, ch)) },
   ] });
 }
 
@@ -2190,7 +2235,7 @@ function endTurn() {
 function tryEndTurn() {
   if (!G || G.busy || G.over || !humanTurn() || T) return;
   // まだ何も行動していないキャラがいたら、確認する
-  const idle = me().field.filter(c => !c.acted);
+  const idle = me().field.filter(c => !c.acted && !isStunned(c));   // スタン中のキャラは数えない
   if (idle.length > 0) {
     openMenu({ title: "確認", noClose: true,
       msg: `${idle.map(c => c.name).join("、")}の行動指示がありませんがよろしいですか?`,
