@@ -1325,6 +1325,8 @@ function targetsFor(foeSide) {
 }
 // 直接攻撃できるか(攻撃できる相手のキャラが1体もいないとき。ホールドされたキャラだけのときもOK)
 const canDirect = foeSide => targetsFor(foeSide).length === 0;
+// ホールドできる相手(ほかをホールド中・防御中のキャラはえらべない)
+const holdTargets = foeSide => targetsFor(foeSide).filter(t => !t.holding && !t.guard);
 
 // キャラにダメージをあたえる。isAttack=true(キャラの技)ならお守りで0になる。
 // 防御中は半分。防御中でHPが2以上なら、HP0以下になっても1だけ残る
@@ -1528,13 +1530,44 @@ function releaseHold(ch) {
 async function doRelease(side, ch) {
   if (!ch.holding) return false;
   const t = ch.holding;
+  const oldRect = cardRect(t.uid);
   releaseHold(ch);
   ch.acted = true;
   addLog(`${who(side)}の${ch.name}は${t.name}のホールドをやめた`);
   render();
+  await flyCard(t.uid, oldRect, 600);   // 元の場所にもどる
   fx(cardEl(t.uid), "swap");
-  await sleep(700);
+  await sleep(500);
   return true;
+}
+function cardRect(uid) { const el = cardEl(uid); return el ? el.getBoundingClientRect() : null; }
+// カードが oldRect の場所から、いまの場所まで、ゆっくり動いて見えるようにする
+// (本物のカードはかくしておき、そっくりのコピーを動かす)
+async function flyCard(uid, oldRect, ms) {
+  const el = cardEl(uid);
+  if (!el || !oldRect) return;
+  const nr = el.getBoundingClientRect();
+  const base = 76;   // カードのもとの横幅
+  const ghost = document.createElement("div");
+  ghost.className = "flyghost";
+  ghost.innerHTML = el.outerHTML;
+  const g = ghost.firstElementChild;
+  g.classList.remove("held", "stun", "targetable");
+  g.style.animation = "none";
+  ghost.style.cssText = `left:${oldRect.left}px;top:${oldRect.top}px;transform:scale(${oldRect.width / base});transition:none;`;
+  document.body.appendChild(ghost);
+  const hide = el.closest(".heldwrap") || el;
+  hide.style.visibility = "hidden";
+  void ghost.offsetWidth;
+  ghost.style.transition = `left ${ms}ms cubic-bezier(.45,0,.25,1), top ${ms}ms cubic-bezier(.45,0,.25,1), transform ${ms}ms ease`;
+  ghost.style.left = nr.left + "px";
+  ghost.style.top = nr.top + "px";
+  ghost.style.transform = `scale(${nr.width / base})`;
+  await sleep(ms + 30);
+  ghost.remove();
+  const now = cardEl(uid);
+  const h2 = now ? (now.closest(".heldwrap") || now) : null;
+  if (h2) h2.style.visibility = "";
 }
 
 // 相手のターンが始まったら、自分のターンは終わっているので、スタンをとく
@@ -1555,7 +1588,7 @@ function skillBlock(side, ch, n) {
   if (isAllSkill(sk) && foeSide.field.length === 0) return "相手の場にキャラがいない";
   if (isAllSkill(sk) && foeSide.field.every(c => c.heldBy)) return "攻撃できる相手がいない";
   if (needsEnemy(sk) && canDirect(foeSide) && ch.fresh) return "出したばかりで直接攻撃できない";
-  if (sk.type === "hold" && !canDirect(foeSide) && !targetsFor(foeSide).some(t => !t.holding)) return "ホールドできる相手がいない";
+  if (sk.type === "hold" && !canDirect(foeSide) && holdTargets(foeSide).length === 0) return "ホールドできる相手がいない(防御中は不可)";
   return "";
 }
 
@@ -1569,7 +1602,7 @@ async function doSkill(side, ch, n, target) {
   } else if (needsEnemy(sk)) {
     if (target) { if (!targetsFor(foeSide).includes(target)) return false; }
     else if (!canDirect(foeSide)) return false;
-    if (sk.type === "hold" && target && target.holding) return false;
+    if (sk.type === "hold" && target && !holdTargets(foeSide).includes(target)) return false;
   }
 
   const dmgSkill = isDmgSkill(sk);
@@ -1645,7 +1678,9 @@ async function doSkill(side, ch, n, target) {
       addLog(`${ch.name}は${target.name}をホールドした!`);
     }
     const spillTo = holdNow ? null : target.holding;   // ホールドしているキャラを攻撃したとき
+    const oldRect = holdNow ? cardRect(target.uid) : null;
     render();
+    if (holdNow) await flyCard(target.uid, oldRect, 700);    // 引き寄せる(0.7秒)
     const tel = cardEl(target.uid);
     if (r.blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
     else { fx(tel, holdNow ? "chain" : stun ? "zap" : "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
@@ -1888,7 +1923,7 @@ function aiAction(side, ch) {
       const dmg = sk.dmg * mult;
       if (!canDirect(foeSide)) {
         let pool = targetsFor(foeSide);
-        if (sk.type === "hold") { pool = pool.filter(t => !t.holding); if (pool.length === 0) return; }
+        if (sk.type === "hold") { pool = holdTargets(foeSide); if (pool.length === 0) return; }
         const noAmulet = pool.filter(t => !t.amulet);          // お守り中は0ダメージなので、さける
         const ts = noAmulet.length > 0 ? noAmulet : pool;
         const kill = ts.filter(t => effDmg(t, dmg, true) >= t.hp).sort((a, b) => b.hp - a.hp);
@@ -2239,7 +2274,10 @@ function skillBtnLabel(sk, n, m) {
     all: `💎${c} 全体💥${sk.dmg * mm}`,
     sacrifice: `💎${c} 💥${sk.dmg * mm} 自分-${sk.self}`,
     chance: `💎${c} 💥${sk.dmg * mm} ${sk.pct}%`,
-  }[sk.type];
+    stun: `💎${c} 💥${sk.dmg * mm}+⚡スタン`,
+    stunall: `💎${c} 全体💥${sk.dmg * mm}+⚡スタン`,
+    hold: `💎${c} 💥${sk.dmg * mm}+⛓ホールド`,
+  }[sk.type] || `💎${c} 💥${sk.dmg * mm}`;
   return `${n === 1 ? "①" : "②"} ${sk.name}(${body})`;
 }
 
@@ -2280,7 +2318,7 @@ function chooseSkillTarget(ch, n) {
   }
   if (canDirect(foeSide)) { run(() => doSkill(p, ch, n, null)); return; }   // 攻撃できる相手がいなければ直接攻撃
   let ts = targetsFor(foeSide);
-  if (sk.type === "hold") ts = ts.filter(t => !t.holding);   // ホールドしているキャラは、つかまえられない
+  if (sk.type === "hold") ts = holdTargets(foeSide);   // ホールド中・防御中のキャラは、つかまえられない
   const prompt = ts.some(t => t.decoy > 0) ? "身代わりのキャラをタップ(ほかは狙えません)"
     : sk.type === "hold" ? "ホールドする相手をタップ" : "攻撃する相手をタップ";
   startTarget(prompt, ts, t => run(() => doSkill(p, ch, n, t)));
@@ -2288,7 +2326,10 @@ function chooseSkillTarget(ch, n) {
 
 // カードのタップをまとめて受け取る
 $("screen-battle").addEventListener("click", e => {
-  if (!G || G.over) return;
+  if (!G) return;
+  // まん中の説明をタップすると、カードより前に出す(もう一度タップでもどす)
+  if (!T && e.target.closest("#center")) { $("center").classList.toggle("front"); return; }
+  if (G.over) return;
   // 2人対戦の「ターン終了」ボタン
   const eb = e.target.closest("[data-end]");
   if (eb) { if (!eb.disabled) tryEndTurn(); return; }
