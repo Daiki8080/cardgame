@@ -1891,7 +1891,7 @@ function infoHTML(side, label, showHand, name) {
   return `${face ? `<div class="face"><img id="face-${name}" src="${face}" alt=""></div>` : ""}<div class="who${face ? " named" : ""}">${label}</div>
     ${barHTML(side, side.hp, START_HP, "big", "HP " + Math.max(0, side.hp))}
     <div class="gemsbox">${gemsHTML(side.cost)}</div>
-    <div class="stat">📚${side.deck.length}</div><div class="stat">☠${side.down.length}</div>${showHand ? `<div class="stat">✋${side.hand.length}</div>` : ""}`;
+    <div class="stats"><div class="stat">📚${side.deck.length}</div><div class="stat">☠${side.down.length}</div>${showHand ? `<div class="stat">✋${side.hand.length}</div>` : ""}</div>`;
 }
 function fieldHTML(list) {
   let h = "";
@@ -1904,8 +1904,27 @@ function handHTML(side, name) {
   return faceUp ? side.hand.map(c => cardHTML(c)).join("") : side.hand.map(() => '<div class="card back"></div>').join("");
 }
 
+// カードの大きさを、画面の高さに合わせて決める(CPU戦)。カード以外の部分の高さを引いて、残りを3列(相手の場・自分の場・手札)で分ける
+function fitBattle() {
+  const scr = $("screen-battle");
+  if (!scr.classList.contains("active") || scr.classList.contains("pvp")) return;
+  const cs = getComputedStyle(scr);
+  const H = scr.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const W = scr.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const gap = parseFloat(cs.rowGap) || 0;
+  const shown = [...scr.children].filter(el => getComputedStyle(el).display !== "none");
+  const fixed = $("c-info").offsetHeight + $("p-info").offsetHeight + $("battle-row").offsetHeight
+    + 54 + gap * (shown.length - 1) + 2 + 2 + 6 + 6;   // 54 = まん中の説明(3行)、残りは場・手札のすきま
+  let z = (H - fixed) / (3 * 106);
+  z = Math.min(z, (W - 16 - 6) / (3 * 76), 1.5);   // 横はみ出さない
+  z = Math.max(0.6, Math.floor(z * 100) / 100);
+  scr.style.setProperty("--bz", z);
+}
+window.addEventListener("resize", () => fitBattle());
+
 function render() {
   if (!G) return;
+  fitBattle();
   const pvp = isPvp();
   const handScroll = $("p-hand").scrollLeft;   // 手札のスクロール位置をおぼえておく
   const handScroll2 = $("c-hand").scrollLeft;

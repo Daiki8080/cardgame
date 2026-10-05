@@ -999,17 +999,39 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 #talk-portrait img.chara { max-width: 150vw; object-fit: contain; object-position: center bottom; }
 #talk-stage { overflow: hidden; }
 
-/* ----- バトル画面のまん中の説明は、かならず3行ぶん見えるようにする ----- */
-#center { flex: 1 0 auto; min-height: 66px; }   /* ターン表示18px + 説明3行(15px×3) */
-/* 画面のたてが短いスマホでは、場のカードを少し小さくして、説明の場所をあける */
-@media (max-height: 640px) {
-  #screen-battle:not(.pvp) .field { min-height: calc(var(--ch) * .86 + 4px); }
-  #screen-battle:not(.pvp) .field .card, #screen-battle:not(.pvp) .field .slot { zoom: .86; }
-  #screen-battle:not(.pvp) { gap: 3px; }
-}
-@media (max-height: 560px) {
-  #screen-battle:not(.pvp) .field { min-height: calc(var(--ch) * .74 + 4px); }
-  #screen-battle:not(.pvp) .field .card, #screen-battle:not(.pvp) .field .slot { zoom: .74; }
-  #screen-battle:not(.pvp) #p-hand { min-height: calc(var(--ch) * .86 + 8px); }
-  #screen-battle:not(.pvp) #p-hand .card { zoom: .86; }
-}
+/* =====================================================
+   バトル画面(CPU戦):カードをできるだけ大きく
+   カードの大きさ --bz は、画面の高さに合わせて game.js の fitBattle() が決める
+   ===================================================== */
+#screen-battle:not(.pvp) { --bz: 1; gap: 3px; }
+#screen-battle:not(.pvp) .field { min-height: calc(var(--ch) * var(--bz) + 2px); gap: 8px; }
+#screen-battle:not(.pvp) .field .card, #screen-battle:not(.pvp) .field .slot,
+#screen-battle:not(.pvp) #p-hand .card { zoom: var(--bz); }
+#screen-battle:not(.pvp) #p-hand { min-height: calc(var(--ch) * var(--bz) + 6px); padding: 3px 2px; }
+
+/* HPの行は低く。HPゲージは自分と相手で同じ長さ(名前・💎・数字の欄の幅をそろえる) */
+#screen-battle:not(.pvp) .info { height: 22px; gap: 5px; font-size: 12px; }
+#screen-battle:not(.pvp) .info .who { width: 40px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#screen-battle:not(.pvp) .info .bar { flex: 1 1 0; min-width: 0; }
+#screen-battle:not(.pvp) .info .bar.big { height: 15px; }
+#screen-battle:not(.pvp) .info .bar.big b { font-size: 10px; line-height: 14px; padding-left: 7px; }
+#screen-battle:not(.pvp) .gemsbox { width: 78px; min-width: 0; flex: none; font-size: 12px; overflow: hidden; }
+.info .stats { width: 92px; flex: none; display: flex; justify-content: flex-end; gap: 5px; }
+.info .stats .stat { font-size: 11px; }
+/* ストーリー:顔アイコンつき */
+#screen-battle.story .info { height: 30px; }
+#screen-battle.story .info .face { width: 28px; height: 28px; }
+#screen-battle.story .info .who.named { width: 64px; max-width: none; font-size: 10.5px; letter-spacing: 0; }
+
+/* まん中の説明:ターン表示+3行。文字を小さく */
+#screen-battle:not(.pvp) #center { flex: 1 0 auto; min-height: 54px; }
+#screen-battle:not(.pvp) #turn-label { height: 15px; line-height: 15px; font-size: 12px; margin-top: 1px; }
+#screen-battle:not(.pvp) #log div { height: 12px; line-height: 12px; font-size: 10.5px; }
+
+/* ターン終了・やめる は小さく */
+#screen-battle:not(.pvp) #battle-row .btn.small { padding: 4px 6px; font-size: 12px; border-radius: 9px; }
+
+/* 画面の上の「← タイトルへ」ボタン(スクロールしても上に残る) */
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; justify-content: flex-start; margin: -16px -16px 8px; padding: 8px 12px;
+  background: linear-gradient(180deg, var(--bg1) 70%, rgba(8,11,28,0)); }
+.topbar .btn { width: auto; padding: 6px 12px; font-size: 13px; }
