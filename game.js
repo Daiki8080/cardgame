@@ -244,6 +244,7 @@ function skillShort(sk, m) {
   if (sk.type === "chance") return `💎${c} 🎲${sk.dmg * mm}`;
   if (sk.type === "stun") return `💎${c} ⚡${sk.dmg * mm}`;
   if (sk.type === "stunall") return `💎${c} 🌩${sk.dmg * mm}`;
+  if (sk.type === "hold") return `💎${c} ⛓${sk.dmg * mm}`;
   return `💎${c} 💥${sk.dmg * mm}`;
 }
 // 技の くわしい説明(大きいカードに出す)
@@ -256,6 +257,7 @@ function skillDetail(sk, m) {
   if (sk.type === "chance") return `確率攻撃 / 💎${c} / 💥${sk.dmg * mm}(成功${sk.pct}%)`;
   if (sk.type === "stun") return `スタン攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手1体)`;
   if (sk.type === "stunall") return `スタン全体攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手全員)`;
+  if (sk.type === "hold") return `ホールド攻撃 / 💎${c} / 💥${sk.dmg * mm}+⛓ホールド(相手1体)`;
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
@@ -445,6 +447,7 @@ const SKILL_FORM = {
   chance:    { v1: "ダメージ", v2: "成功する確率(%)" },
   stun:      { v1: "ダメージ" },
   stunall:   { v1: "ダメージ" },
+  hold:      { v1: "ダメージ" },
 };
 function updateSkillForm(p) {   // p は "a1" か "a2"
   const f = SKILL_FORM[$("f-" + p + "type").value] || SKILL_FORM.attack;
@@ -767,7 +770,7 @@ function readSkill(p, no) {
   if (type === "heal") return { type, name, cost, heal: v1 };
   if (type === "sacrifice") return { type, name, cost, dmg: v1, self: v2 };
   if (type === "chance") return { type, name, cost, dmg: v1, pct: v2 };
-  return { type, name, cost, dmg: v1 };   // 攻撃・全体攻撃・スタン攻撃・スタン全体攻撃
+  return { type, name, cost, dmg: v1 };   // 攻撃・全体攻撃・スタン攻撃・スタン全体攻撃・ホールド攻撃
 }
 
 $("btn-save-card").onclick = () => {
@@ -1314,10 +1317,14 @@ function playChar(side, card) {
 }
 
 // 相手の「身代わり」がいるときは、そのキャラしか攻撃対象にできない
+// ホールドされているキャラは、攻撃できない
 function targetsFor(foeSide) {
-  const decoys = foeSide.field.filter(c => c.decoy > 0);
-  return decoys.length > 0 ? decoys : foeSide.field.slice();
+  const free = foeSide.field.filter(c => !c.heldBy);
+  const decoys = free.filter(c => c.decoy > 0);
+  return decoys.length > 0 ? decoys : free;
 }
+// 直接攻撃できるか(攻撃できる相手のキャラが1体もいないとき。ホールドされたキャラだけのときもOK)
+const canDirect = foeSide => targetsFor(foeSide).length === 0;
 
 // キャラにダメージをあたえる。isAttack=true(キャラの技)ならお守りで0になる。
 // 防御中は半分。防御中でHPが2以上なら、HP0以下になっても1だけ残る
@@ -1353,6 +1360,7 @@ async function sendDown(side, ch) {
   }
   side.field = side.field.filter(c => c !== ch);
   ch.stunTurn = 0;
+  releaseHold(ch);   // ダウンしたらホールドは解除(つかまっていたキャラは元の場所にもどる)
   side.down.push(ch);
   addLog(`${ch.name}はダウンした!`);
   if (ch.under) {
@@ -1372,14 +1380,18 @@ function itemBlock(side, card) {
       if (side.cost < LASER_COST) return `💎が${LASER_COST}つ必要です`;
       return "";
     case "bomb":
-      return foeSide.field.length > 0 ? "" : "相手の場にキャラがいないので使えません";
-    case "healChar": case "amulet": case "plush": case "decoy":
+      return foeSide.field.some(c => !c.heldBy) ? "" : "相手の場にキャラがいないので使えません";
+    case "amulet":
+      return side.field.some(c => !isLocked(c)) ? "" : "お守りをつけられるキャラがいません(ホールド中は不可)";
+    case "decoy":
+      return side.field.some(c => !c.heldBy) ? "" : "場にキャラがいないので使えません";
+    case "healChar": case "plush":
       return side.field.length > 0 ? "" : "場にキャラがいないので使えません";
     case "revive":
       return side.down.some(c => c.type === "char") ? "" : "ダウンしたキャラがいないので使えません";
     case "swap":
-      if (!side.field.some(c => !c.power && !isStunned(c)) && side.field.some(c => !c.power)) return "場のキャラがスタン中で交代できません";
-      return side.field.some(c => !c.power && !isStunned(c)) && side.hand.some(c => c.type === "char" && !c.power)
+      if (!side.field.some(c => !c.power && !isStunned(c) && !isLocked(c)) && side.field.some(c => !c.power)) return "場のキャラがスタン中・ホールド中で交代できません";
+      return side.field.some(c => !c.power && !isStunned(c) && !isLocked(c)) && side.hand.some(c => c.type === "char" && !c.power)
         ? "" : "場と手札の両方に、パワーアップ以外のキャラが必要です";
     default:
       return "";
@@ -1421,7 +1433,7 @@ async function useItem(side, card, target, target2) {
     fx(cardEl(target.uid) || myInfo, "heal");
     await sleep(900);
   } else if (k === "bomb") {
-    const list = foeSide.field.slice();
+    const list = foeSide.field.filter(t => !t.heldBy);   // ホールドされているキャラには当たらない
     const results = list.map(t => ({ t: t, r: hitChar(t, 30, false) }));   // 防御中は半分
     results.forEach(x => addLog(hitLog(x.t, x.r)));
     render();
@@ -1430,6 +1442,7 @@ async function useItem(side, card, target, target2) {
       if (x.r.survived) fx(cardEl(x.t.uid), "guard");
     });
     await sleep(1000);
+    for (const x of results) if (x.t.holding) await holdSpill(side, x.t.holding, 30);   // ホールドされている自分のキャラにも
     for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
   } else if (k === "laser") {
     foeSide.hp -= 30;
@@ -1439,6 +1452,7 @@ async function useItem(side, card, target, target2) {
     await sleep(900);
     if (foeSide.hp <= 0) { finishGame(side === G.player); return true; }
   } else if (k === "amulet") {
+    if (isLocked(target)) return false;
     target.amulet = true;
     addLog(`${target.name}は次の相手ターン、攻撃が0ダメージ`);
     render();
@@ -1451,13 +1465,14 @@ async function useItem(side, card, target, target2) {
     fx(cardEl(target.uid), "plush");
     await sleep(900);
   } else if (k === "decoy") {
+    if (target.heldBy) return false;
     target.decoy = DECOY_TURNS;
     addLog(`${target.name}が身代わりに!(${DECOY_TURNS}ターン)`);
     render();
     fx(cardEl(target.uid), "swap");
     await sleep(900);
   } else if (k === "swap") {
-    if (isStunned(target)) return false;
+    if (isStunned(target) || isLocked(target)) return false;
     const idx = side.field.indexOf(target);
     side.field[idx] = target2;                         // 手札のキャラが同じ場所に入る
     side.hand = side.hand.filter(c => c !== target2);
@@ -1475,7 +1490,7 @@ async function useItem(side, card, target, target2) {
 }
 
 async function doGuard(side, ch) {
-  if (ch.acted || isStunned(ch)) return false;
+  if (ch.acted || isStunned(ch) || isLocked(ch)) return false;
   if (isAI(side)) { G.acting = ch.uid; render(); await wait(800); }
   ch.guard = true;
   ch.acted = true;
@@ -1490,7 +1505,7 @@ async function doGuard(side, ch) {
 // ----- キャラの技 -----
 const skillOf = (ch, n) => n === 1 ? ch.a1 : ch.a2;
 const isDmgSkill = sk => sk.type !== "heal";
-const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance" || sk.type === "stun";   // 相手1体をえらぶ技
+const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance" || sk.type === "stun" || sk.type === "hold";   // 相手1体をえらぶ技
 const isAllSkill = sk => sk.type === "all" || sk.type === "stunall";   // 相手全員への技
 
 // ----- スタン -----
@@ -1502,6 +1517,26 @@ function stunChar(owner, t) {
   t.stunTurn = owner.turns + 1;
   t.guard = false;
 }
+// ----- ホールド -----
+// ch.holding … このキャラがつかまえている相手のキャラ / ch.heldBy … このキャラをつかまえている相手のキャラ
+// どちらも、技・防御・交代・パワーアップ・お守りができない(つかまえている側は「ホールドをやめる」だけできる)
+const isLocked = ch => !!(ch.holding || ch.heldBy);
+function releaseHold(ch) {
+  if (ch.holding) { ch.holding.heldBy = null; ch.holding = null; }
+  if (ch.heldBy) { ch.heldBy.holding = null; ch.heldBy = null; }
+}
+async function doRelease(side, ch) {
+  if (!ch.holding) return false;
+  const t = ch.holding;
+  releaseHold(ch);
+  ch.acted = true;
+  addLog(`${who(side)}の${ch.name}は${t.name}のホールドをやめた`);
+  render();
+  fx(cardEl(t.uid), "swap");
+  await sleep(700);
+  return true;
+}
+
 // 相手のターンが始まったら、自分のターンは終わっているので、スタンをとく
 function clearStuns(owner) {
   owner.field.forEach(c => { if (c.stunTurn && c.stunTurn <= owner.turns) c.stunTurn = 0; });
@@ -1512,11 +1547,15 @@ function skillBlock(side, ch, n) {
   const sk = skillOf(ch, n);
   const mult = isDmgSkill(sk) && ch.plush ? 2 : 1;
   const foeSide = foe(side);
+  if (ch.heldBy) return "ホールドされて動けない";
+  if (ch.holding) return "ホールド中";
   if (isStunned(ch)) return "スタン中で動けない";
   if (ch.acted) return "行動ずみ";
   if (side.cost < sk.cost * mult) return "コスト不足";
   if (isAllSkill(sk) && foeSide.field.length === 0) return "相手の場にキャラがいない";
-  if (needsEnemy(sk) && foeSide.field.length === 0 && ch.fresh) return "出したばかりで直接攻撃できない";
+  if (isAllSkill(sk) && foeSide.field.every(c => c.heldBy)) return "攻撃できる相手がいない";
+  if (needsEnemy(sk) && canDirect(foeSide) && ch.fresh) return "出したばかりで直接攻撃できない";
+  if (sk.type === "hold" && !canDirect(foeSide) && !targetsFor(foeSide).some(t => !t.holding)) return "ホールドできる相手がいない";
   return "";
 }
 
@@ -1529,7 +1568,8 @@ async function doSkill(side, ch, n, target) {
     if (!target || !side.field.includes(target)) return false;
   } else if (needsEnemy(sk)) {
     if (target) { if (!targetsFor(foeSide).includes(target)) return false; }
-    else if (foeSide.field.length > 0) return false;
+    else if (!canDirect(foeSide)) return false;
+    if (sk.type === "hold" && target && target.holding) return false;
   }
 
   const dmgSkill = isDmgSkill(sk);
@@ -1577,7 +1617,7 @@ async function doSkill(side, ch, n, target) {
   const dmg = sk.dmg * mult;
   const stun = sk.type === "stun" || sk.type === "stunall";
   if (isAllSkill(sk)) {
-    const list = foeSide.field.slice();
+    const list = foeSide.field.filter(t => !t.heldBy);   // ホールドされているキャラには当たらない
     const results = list.map(t => ({ t: t, r: hitChar(t, dmg, true) }));
     results.forEach(x => addLog(hitLog(x.t, x.r)));
     // スタン全体攻撃:お守りで防いだキャラ以外は、スタン
@@ -1590,16 +1630,27 @@ async function doSkill(side, ch, n, target) {
       else { fx(el, stun ? "zap" : "slash"); popAt(el, "-" + x.r.dmg); if (x.r.survived) fx(el, "guard"); }
     });
     await sleep(1000);
+    // ホールドしているキャラに当たったら、ホールドされているキャラ(こちらのキャラ)にも同じダメージ
+    for (const x of results) if (x.t.holding && !x.r.blocked) await holdSpill(side, x.t.holding, dmg);
     for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
   } else if (target) {
     const r = hitChar(target, dmg, true);
     addLog(hitLog(target, r));
     if (stun && !r.blocked && target.hp > 0) { stunChar(foeSide, target); addLog(`${target.name}はスタンした!`); }
+    // ホールド攻撃:お守りで防がれず、たおれなかったら、つかまえる
+    const holdNow = sk.type === "hold" && !r.blocked && target.hp > 0 && !target.holding && !target.heldBy;
+    if (holdNow) {
+      ch.holding = target; target.heldBy = ch;
+      ch.guard = false; target.guard = false; target.amulet = false; target.decoy = 0;
+      addLog(`${ch.name}は${target.name}をホールドした!`);
+    }
+    const spillTo = holdNow ? null : target.holding;   // ホールドしているキャラを攻撃したとき
     render();
     const tel = cardEl(target.uid);
     if (r.blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
-    else { fx(tel, stun ? "zap" : "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
+    else { fx(tel, holdNow ? "chain" : stun ? "zap" : "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
     await sleep(900);
+    if (spillTo && !r.blocked) await holdSpill(side, spillTo, dmg);
     if (target.hp <= 0) await sendDown(foeSide, target);
   } else {
     foeSide.hp -= dmg;
@@ -1625,6 +1676,18 @@ async function doSkill(side, ch, n, target) {
   return true;
 }
 
+// ホールドしているキャラが攻撃されたとき、ホールドされているキャラ(held、攻撃した側のキャラ)にも同じダメージ
+async function holdSpill(side, held, dmg) {
+  if (!held || held.hp <= 0 || G.over) return;
+  const r = hitChar(held, dmg, true);
+  addLog(`ホールドされている${held.name}にも${r.dmg}ダメージ`);
+  render();
+  const el = cardEl(held.uid);
+  fx(el, "slash"); popAt(el, "-" + r.dmg);
+  await sleep(800);
+  if (held.hp <= 0) await sendDown(side, held);
+}
+
 // ----- パワーアップ(通常カードを、手札のパワーアップカードに置き換える) -----
 function powerBase(side, pcard) {
   return side.field.find(c => !c.power && c.srcId === pcard.baseId);
@@ -1633,6 +1696,7 @@ function powerBlock(side, pcard) {
   if (!pcard.power) return "パワーアップカードではありません";
   if (!powerBase(side, pcard)) return `元の「${pcard.baseName}」が場にいません`;
   if (isStunned(powerBase(side, pcard))) return `元の「${pcard.baseName}」がスタン中です`;
+  if (isLocked(powerBase(side, pcard))) return `元の「${pcard.baseName}」がホールド中です`;
   if (side.cost < pcard.upCost) return "コスト不足";
   return "";
 }
@@ -1706,6 +1770,7 @@ const FX = {
   charge: { e: ["✨", "⭐", "✦"], n: 10, ring: "#ffd700" },
   power:  { e: ["✨", "⭐", "🌟", "💫", "✦", "✧"], n: 30, ring: "#ffd700", gold: true },
   zap:    { e: ["⚡", "⚡", "✨", "💥"], n: 12, line: true, ring: "#ffe600" },
+  chain:  { e: ["⛓️", "⛓️", "✨", "💥"], n: 10, line: true, ring: "#b8c0cc" },
 };
 
 function cardEl(uid) {
@@ -1816,13 +1881,14 @@ function aiAction(side, ch) {
       score = Math.min(sk.heal, t.maxHp - t.hp) * 0.8;
       target = t;
     } else if (isAllSkill(sk)) {
-      score = foeSide.field.reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
+      score = foeSide.field.filter(t => !t.heldBy).reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
       if (sk.type === "stunall") score += foeSide.field.filter(t => !t.amulet && !isStunned(t)).length * 8;   // スタンのぶん、少し高く
     } else {
       if (sk.type === "sacrifice" && sk.self >= ch.hp) return;   // 自分がダウンしてしまう捨て身はしない
       const dmg = sk.dmg * mult;
-      if (foeSide.field.length > 0) {
-        const pool = targetsFor(foeSide);
+      if (!canDirect(foeSide)) {
+        let pool = targetsFor(foeSide);
+        if (sk.type === "hold") { pool = pool.filter(t => !t.holding); if (pool.length === 0) return; }
         const noAmulet = pool.filter(t => !t.amulet);          // お守り中は0ダメージなので、さける
         const ts = noAmulet.length > 0 ? noAmulet : pool;
         const kill = ts.filter(t => effDmg(t, dmg, true) >= t.hp).sort((a, b) => b.hp - a.hp);
@@ -1833,6 +1899,8 @@ function aiAction(side, ch) {
       }
       if (sk.type === "chance") score *= sk.pct / 100;
       if (sk.type === "stun" && target && !isStunned(target) && !target.amulet) score += 10;
+      if (sk.type === "hold" && target && !target.amulet && target.hp > effDmg(target, dmg, true)) score += 6;
+      if (target && target.holding) score -= Math.min(target.holding.hp, dmg) * 0.8;   // 自分のキャラにもダメージが行く
       if (sk.type === "sacrifice") score -= sk.self * 0.7;
     }
     if (score > 0 && (!best || score > best.score)) best = { n: n, target: target, score: score };
@@ -1870,13 +1938,13 @@ async function aiPlay(side) {
     } else if (k === "laser") {
       if (foeSide.hp <= 30 || side.cost >= LASER_COST + 3) await useItem(side, card);
     } else if (k === "amulet") {
-      const t = side.field.filter(c => !c.amulet).sort((a, b) => b.hp - a.hp)[0];
+      const t = side.field.filter(c => !c.amulet && !isLocked(c)).sort((a, b) => b.hp - a.hp)[0];
       if (t && foeSide.field.length > 0) await useItem(side, card, t);
     } else if (k === "decoy") {
-      const t = side.field.slice().sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
+      const t = side.field.filter(c => !c.heldBy).sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
       if (t && side.field.length >= 2 && foeSide.field.length > 0 && !side.field.some(c => c.decoy > 0)) await useItem(side, card, t);
     } else if (k === "swap") {
-      const f = side.field.filter(c => !c.power && !isStunned(c) && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
+      const f = side.field.filter(c => !c.power && !isStunned(c) && !isLocked(c) && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
       const h = side.hand.filter(c => c.type === "char" && !c.power).sort((a, b) => b.maxHp - a.maxHp)[0];
       if (f && h) await useItem(side, card, f, h);
     }
@@ -1906,7 +1974,7 @@ async function aiPlay(side) {
   for (const card of side.hand.filter(c => c.type === "item" && c.kind === "plush")) {
     if (G.over) return;
     const t = side.field
-      .filter(c => !c.acted && !isStunned(c) && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
+      .filter(c => !c.acted && !isStunned(c) && !isLocked(c) && !c.plush && Math.min(c.a1.cost, c.a2.cost) * 2 <= side.cost)
       .sort((a, b) => b.hp - a.hp)[0];
     if (t) { await useItem(side, card, t); await wait(500); }
   }
@@ -1914,7 +1982,8 @@ async function aiPlay(side) {
   // 6. 行動できるキャラで技を使う(使える技がなければ防御)
   for (const ch of side.field.slice()) {
     if (G.over) return;
-    if (ch.acted || isStunned(ch)) continue;   // スタン中は何もできない
+    if (ch.holding && ch.hp <= ch.maxHp * 0.3) { await doRelease(side, ch); await wait(500); continue; }   // あぶなくなったらホールドをやめる
+    if (ch.acted || isStunned(ch) || isLocked(ch)) continue;   // スタン中・ホールド中は何もできない
     const act = aiAction(side, ch);
     if (!act) { await doGuard(side, ch); await wait(600); continue; }
     await doSkill(side, ch, act.n, act.target);
@@ -1938,11 +2007,39 @@ function infoHTML(side, label, showHand, name) {
     <div class="gemsbox">${gemsHTML(side.cost)}</div>
     <div class="stats"><div class="stat">📚${side.deck.length}</div><div class="stat">☠${side.down.length}</div>${showHand ? `<div class="stat">✋${side.hand.length}</div>` : ""}</div>`;
 }
-function fieldHTML(list) {
+// 場の表示。ホールドされたキャラは、元の場所をあけて、つかまえているキャラに半分重ねて表示する
+function fieldHTML(list, top) {
   let h = "";
-  for (let i = 0; i < FIELD_MAX; i++) h += list[i] ? cardHTML(list[i], "", true) : '<div class="slot"></div>';
+  for (let i = 0; i < FIELD_MAX; i++) {
+    const c = list[i];
+    if (!c) { h += '<div class="slot"></div>'; continue; }
+    if (c.heldBy) { h += '<div class="slot heldslot">⛓</div>'; continue; }
+    if (c.holding) {
+      const dir = isPvp() || !top ? "up" : "down";   // 相手のほうへ引き寄せる(上の場なら下向き)
+      h += `<div class="holdpair ${dir}">${cardHTML(c, "", true)}<div class="heldwrap">${cardHTML(c.holding, " held", true)}${CHAIN_FX}</div></div>`;
+      continue;
+    }
+    h += cardHTML(c, "", true);
+  }
   return h;
 }
+// ホールドされたカードに重ねる鎖
+const CHAIN_FX = (() => {
+  // 楕円の輪と、横から見た細い輪を、交互に少し重ねて並べる(本物の鎖のように)
+  const chain = (x1, y1, x2, y2) => {
+    const len = Math.hypot(x2 - x1, y2 - y1), ang = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    const n = Math.floor(len / 7);
+    let h = "";
+    for (let i = 0; i <= n; i++) {
+      const x = (x1 + (x2 - x1) * i / n).toFixed(1), y = (y1 + (y2 - y1) * i / n).toFixed(1);
+      h += i % 2
+        ? `<rect x="${x - 5}" y="${y - 1.1}" width="10" height="2.2" rx="1.1" transform="rotate(${ang} ${x} ${y})"/>`
+        : `<ellipse cx="${x}" cy="${y}" rx="5.4" ry="2.9" transform="rotate(${ang} ${x} ${y})"/>`;
+    }
+    return `<g>${h}</g>`;
+  };
+  return `<svg class="chainfx" viewBox="0 0 76 106" preserveAspectRatio="none">${chain(-2, 6, 78, 98)}${chain(78, 10, -2, 102)}</svg>`;
+})();
 // 手札。2人対戦では、いまターンの人の手札だけ表向き、もう片方は裏向き
 function handHTML(side, name) {
   const faceUp = isPvp() ? (G.live && G.turn === name) : name === "player";
@@ -1975,8 +2072,8 @@ function render() {
   const handScroll2 = $("c-hand").scrollLeft;
   $("c-info").innerHTML = infoHTML(G.cpu, pvp ? "P2" : esc(G.enemyName || "CPU"), true, "cpu");
   $("p-info").innerHTML = infoHTML(G.player, esc(G.playerName || "あなた"), false, "player");
-  $("c-field").innerHTML = fieldHTML(G.cpu.field);
-  $("p-field").innerHTML = fieldHTML(G.player.field);
+  $("c-field").innerHTML = fieldHTML(G.cpu.field, true);
+  $("p-field").innerHTML = fieldHTML(G.player.field, false);
   $("p-hand").innerHTML = handHTML(G.player, "player");
   $("c-hand").innerHTML = pvp ? handHTML(G.cpu, "cpu") : "";
   $("p-hand").scrollLeft = handScroll;
@@ -2114,7 +2211,8 @@ function itemMenu(card) {
     const prompt = k === "healChar" ? "回復するキャラをタップ"
       : k === "amulet" ? "お守りをつけるキャラをタップ"
       : k === "plush" ? "ぬいぐるみをわたすキャラをタップ" : "身代わりにするキャラをタップ";
-    use("使う(対象をえらぶ)", () => startTarget(prompt, p.field, ch => run(() => useItem(p, card, ch))));
+    const list = k === "amulet" ? p.field.filter(c => !isLocked(c)) : k === "decoy" ? p.field.filter(c => !c.heldBy) : p.field;
+    use("使う(対象をえらぶ)", () => startTarget(prompt, list, ch => run(() => useItem(p, card, ch))));
   } else if (k === "revive") {
     use("使う(復活させるキャラをえらぶ)", () => {
       const list = p.down.filter(c => c.type === "char");
@@ -2122,7 +2220,7 @@ function itemMenu(card) {
     });
   } else if (k === "swap") {
     use("使う(対象をえらぶ)", () => {
-      const fields = p.field.filter(c => !c.power && !isStunned(c));   // スタン中のキャラは交代できない
+      const fields = p.field.filter(c => !c.power && !isStunned(c) && !isLocked(c));   // スタン中・ホールド中のキャラは交代できない
       const hands = p.hand.filter(c => c.type === "char" && !c.power);
       startTarget("手札に戻す(場の)キャラをタップ", fields,
         f => startTarget("場に出す(手札の)キャラをタップ", hands,
@@ -2148,7 +2246,14 @@ function skillBtnLabel(sk, n, m) {
 function fieldMenu(ch) {
   const p = me();
   const m = ch.plush ? 2 : 1;
-  let note = isStunned(ch) ? "⚡スタン中:このターンは技も防御もできません" : ch.acted ? "このターンはもう行動しました" : "";
+  if (ch.holding) {   // ホールドしているときは「ホールドをやめる」だけ
+    openMenu({ card: ch, note: `⛓${ch.holding.name}をホールド中:技・防御はできません`, buttons: [
+      { label: "ホールドをやめる", action: () => run(() => doRelease(p, ch)) },
+    ] });
+    return;
+  }
+  let note = ch.heldBy ? `⛓${ch.heldBy.name}にホールドされていて動けません`
+    : isStunned(ch) ? "⚡スタン中:このターンは技も防御もできません" : ch.acted ? "このターンはもう行動しました" : "";
   if (!ch.acted && ch.plush) note = "🧸次の攻撃は、💎も2倍・ダメージも2倍";
   if (!ch.acted && ch.fresh) note += (note ? " / " : "") + "出したばかりなので、直接攻撃はできません";
   const btn = n => {
@@ -2159,7 +2264,7 @@ function fieldMenu(ch) {
   };
   openMenu({ card: ch, note, buttons: [
     btn(1), btn(2),
-    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted || isStunned(ch), action: () => run(() => doGuard(p, ch)) },
+    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted || isStunned(ch) || isLocked(ch), action: () => run(() => doGuard(p, ch)) },
   ] });
 }
 
@@ -2168,14 +2273,16 @@ function chooseSkillTarget(ch, n) {
   const p = me();
   const sk = skillOf(ch, n);
   const foeSide = opp();
-  if (sk.type === "all") { run(() => doSkill(p, ch, n, null)); return; }
+  if (isAllSkill(sk)) { run(() => doSkill(p, ch, n, null)); return; }
   if (sk.type === "heal") {
     startTarget("回復するキャラをタップ", p.field, t => run(() => doSkill(p, ch, n, t)));
     return;
   }
-  if (foeSide.field.length === 0) { run(() => doSkill(p, ch, n, null)); return; }   // 相手の場が空なら直接攻撃
-  const ts = targetsFor(foeSide);
-  const prompt = ts.length < foeSide.field.length ? "身代わりのキャラをタップ(ほかは狙えません)" : "攻撃する相手をタップ";
+  if (canDirect(foeSide)) { run(() => doSkill(p, ch, n, null)); return; }   // 攻撃できる相手がいなければ直接攻撃
+  let ts = targetsFor(foeSide);
+  if (sk.type === "hold") ts = ts.filter(t => !t.holding);   // ホールドしているキャラは、つかまえられない
+  const prompt = ts.some(t => t.decoy > 0) ? "身代わりのキャラをタップ(ほかは狙えません)"
+    : sk.type === "hold" ? "ホールドする相手をタップ" : "攻撃する相手をタップ";
   startTarget(prompt, ts, t => run(() => doSkill(p, ch, n, t)));
 }
 
@@ -2203,19 +2310,20 @@ $("screen-battle").addEventListener("click", e => {
   }
 
   if (!el) return;
-  const zone = el.parentElement.id;
+  const zoneEl = el.closest("#p-hand, #c-hand, #p-field, #c-field");
+  const zone = zoneEl ? zoneEl.id : "";
   const uid = Number(el.dataset.uid);
   const mine = G.turn === "player" ? "p" : "c";      // いま操作している人の場所(p=下 / c=上)
   const other = mine === "p" ? "c" : "p";
   if (zone === mine + "-hand") {
     const card = me().hand.find(c => c.uid === uid);
     if (card) handMenu(card);
-  } else if (zone === mine + "-field") {
-    const ch = me().field.find(c => c.uid === uid);
-    if (ch) fieldMenu(ch);
-  } else if (zone === other + "-field") {
-    const ch = opp().field.find(c => c.uid === uid);
-    if (ch) openMenu({ card: ch, noGems: true });   // 相手のカードは情報を見るだけ
+  } else if (zone === mine + "-field" || zone === other + "-field") {
+    // ホールドされたカードは相手の場に引き寄せられているので、どちらの場にあっても持ち主で決める
+    const mineCh = me().field.find(c => c.uid === uid);
+    const oppCh = opp().field.find(c => c.uid === uid);
+    if (mineCh) fieldMenu(mineCh);
+    else if (oppCh) openMenu({ card: oppCh, noGems: true });   // 相手のカードは情報を見るだけ
   }
 });
 
@@ -2235,7 +2343,7 @@ function endTurn() {
 function tryEndTurn() {
   if (!G || G.busy || G.over || !humanTurn() || T) return;
   // まだ何も行動していないキャラがいたら、確認する
-  const idle = me().field.filter(c => !c.acted && !isStunned(c));   // スタン中のキャラは数えない
+  const idle = me().field.filter(c => !c.acted && !isStunned(c) && !isLocked(c));   // スタン中・ホールド中のキャラは数えない
   if (idle.length > 0) {
     openMenu({ title: "確認", noClose: true,
       msg: `${idle.map(c => c.name).join("、")}の行動指示がありませんがよろしいですか?`,
