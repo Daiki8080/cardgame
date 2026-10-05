@@ -998,3 +998,18 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 /* 横に広いキャラ(マントなど)も小さくなりすぎないように、画面より少し大きくして、はみ出た分はかくす */
 #talk-portrait img.chara { max-width: 150vw; object-fit: contain; object-position: center bottom; }
 #talk-stage { overflow: hidden; }
+
+/* ----- バトル画面のまん中の説明は、かならず3行ぶん見えるようにする ----- */
+#center { flex: 1 0 auto; min-height: 66px; }   /* ターン表示18px + 説明3行(15px×3) */
+/* 画面のたてが短いスマホでは、場のカードを少し小さくして、説明の場所をあける */
+@media (max-height: 640px) {
+  #screen-battle:not(.pvp) .field { min-height: calc(var(--ch) * .86 + 4px); }
+  #screen-battle:not(.pvp) .field .card, #screen-battle:not(.pvp) .field .slot { zoom: .86; }
+  #screen-battle:not(.pvp) { gap: 3px; }
+}
+@media (max-height: 560px) {
+  #screen-battle:not(.pvp) .field { min-height: calc(var(--ch) * .74 + 4px); }
+  #screen-battle:not(.pvp) .field .card, #screen-battle:not(.pvp) .field .slot { zoom: .74; }
+  #screen-battle:not(.pvp) #p-hand { min-height: calc(var(--ch) * .86 + 8px); }
+  #screen-battle:not(.pvp) #p-hand .card { zoom: .86; }
+}
