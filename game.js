@@ -1390,7 +1390,7 @@ function itemBlock(side, card) {
     case "bomb":
       return foeSide.field.some(c => !c.heldBy && !c.escortedBy) ? "" : "相手の場にキャラがいないので使えません";
     case "amulet":
-      return side.field.some(c => !isLocked(c)) ? "" : "お守りをつけられるキャラがいません(ホールド中は不可)";
+      return side.field.some(canAmulet) ? "" : "お守りをつけられるキャラがいません(ホールド中は不可)";
     case "decoy":
       return side.field.some(c => !c.heldBy && !c.escortedBy) ? "" : "場にキャラがいないので使えません";
     case "healChar":
@@ -1463,7 +1463,7 @@ async function useItem(side, card, target, target2) {
     await sleep(900);
     if (foeSide.hp <= 0) { finishGame(side === G.player); return true; }
   } else if (k === "amulet") {
-    if (isLocked(target)) return false;
+    if (!canAmulet(target)) return false;
     target.amulet = true;
     addLog(`${target.name}は次の相手ターン、攻撃が0ダメージ`);
     render();
@@ -1537,6 +1537,8 @@ function stunChar(owner, t) {
 // 守られている味方は、相手から攻撃されない。守っている側が攻撃されると、攻撃したキャラに ch.escortDmg ダメージを返す
 const isLocked = ch => !!(ch.holding || ch.heldBy || ch.escorting || ch.escortedBy);
 const inHold = ch => !!(ch.holding || ch.heldBy);   // ホールド中は回復できない
+// お守りをつけられるか(エスコートしているキャラはOK。ホールド中・エスコートされているキャラは不可)
+const canAmulet = ch => !ch.holding && !ch.heldBy && !ch.escortedBy;
 function releaseHold(ch) {
   if (ch.holding) { ch.holding.heldBy = null; ch.holding = null; }
   if (ch.heldBy) { ch.heldBy.holding = null; ch.heldBy = null; }
@@ -2047,7 +2049,7 @@ async function aiPlay(side) {
     } else if (k === "laser") {
       if (foeSide.hp <= 30 || side.cost >= LASER_COST + 3) await useItem(side, card);
     } else if (k === "amulet") {
-      const t = side.field.filter(c => !c.amulet && !isLocked(c)).sort((a, b) => b.hp - a.hp)[0];
+      const t = side.field.filter(c => !c.amulet && canAmulet(c)).sort((a, b) => (b.escorting ? 1 : 0) - (a.escorting ? 1 : 0) || b.hp - a.hp)[0];   // エスコート中のキャラを優先して守る
       if (t && foeSide.field.length > 0) await useItem(side, card, t);
     } else if (k === "decoy") {
       const t = side.field.filter(c => !c.heldBy && !c.escortedBy).sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
@@ -2215,6 +2217,14 @@ function render() {
 
 // ----- メニュー -----
 function closeMenu() { $("menu").classList.remove("open"); }
+// メニューが画面からはみ出すときは、カードの部分を小さくして、ボタンが全部見えるようにする
+function fitMenu() {
+  const panel = $("menu-panel"), big = panel.querySelector(".big");
+  if (!big) return;
+  big.style.maxHeight = "";
+  const over = panel.scrollHeight - panel.clientHeight;
+  if (over > 0) big.style.maxHeight = Math.max(80, big.offsetHeight - over - 2) + "px";
+}
 // opt: card(大きく見せるカード) title msg note buttons noClose
 function openMenu(opt) {
   const panel = $("menu-panel");
@@ -2245,6 +2255,7 @@ function openMenu(opt) {
     panel.appendChild(close);
   }
   $("menu").classList.add("open");
+  fitMenu();
 }
 $("menu").addEventListener("click", e => { if (e.target.id === "menu") closeMenu(); });
 
@@ -2266,6 +2277,7 @@ function openPicker(title, list, onPick) {
   close.onclick = closeMenu;
   panel.appendChild(close);
   $("menu").classList.add("open");
+  fitMenu();
 }
 
 // ----- カードをタップして対象をえらぶ -----
@@ -2327,7 +2339,7 @@ function itemMenu(card) {
     const prompt = k === "healChar" ? "回復するキャラをタップ"
       : k === "amulet" ? "お守りをつけるキャラをタップ"
       : k === "plush" ? "ぬいぐるみをわたすキャラをタップ" : "身代わりにするキャラをタップ";
-    const list = k === "amulet" ? p.field.filter(c => !isLocked(c)) : k === "decoy" ? p.field.filter(c => !c.heldBy && !c.escortedBy)
+    const list = k === "amulet" ? p.field.filter(canAmulet) : k === "decoy" ? p.field.filter(c => !c.heldBy && !c.escortedBy)
       : k === "healChar" ? p.field.filter(c => !inHold(c)) : p.field;
     use("使う(対象をえらぶ)", () => startTarget(prompt, list, ch => run(() => useItem(p, card, ch))));
   } else if (k === "revive") {
@@ -2359,7 +2371,7 @@ function skillBtnLabel(sk, n, m) {
     stun: `💎${c} 💥${sk.dmg * mm}+⚡スタン`,
     stunall: `💎${c} 全体💥${sk.dmg * mm}+⚡スタン`,
     hold: `💎${c} 💥${sk.dmg * mm}+⛓ホールド`,
-    escort: `💎${sk.cost} 🤝エスコート(返し💥${sk.dmg})`,
+    escort: `💎${sk.cost} 🤝返し💥${sk.dmg}`,
   }[sk.type] || `💎${c} 💥${sk.dmg * mm}`;
   return `${n === 1 ? "①" : "②"} ${sk.name}(${body})`;
 }
@@ -2392,7 +2404,7 @@ function fieldMenu(ch) {
   };
   openMenu({ card: ch, note, buttons: [
     btn(1), btn(2),
-    { label: "防御(ダメージ半分・HP2以上ならHP1でこらえる)", disabled: ch.acted || isStunned(ch) || isLocked(ch), action: () => run(() => doGuard(p, ch)) },
+    { label: "🛡防御(ダメージ半分・HP1でこらえる)", disabled: ch.acted || isStunned(ch) || isLocked(ch), action: () => run(() => doGuard(p, ch)) },
   ] });
 }
 
