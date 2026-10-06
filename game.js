@@ -245,6 +245,7 @@ function skillShort(sk, m) {
   if (sk.type === "stun") return `💎${c} ⚡${sk.dmg * mm}`;
   if (sk.type === "stunall") return `💎${c} 🌩${sk.dmg * mm}`;
   if (sk.type === "hold") return `💎${c} ⛓${sk.dmg * mm}`;
+  if (sk.type === "escort") return `💎${sk.cost} 🤝${sk.dmg}`;
   return `💎${c} 💥${sk.dmg * mm}`;
 }
 // 技の くわしい説明(大きいカードに出す)
@@ -258,6 +259,7 @@ function skillDetail(sk, m) {
   if (sk.type === "stun") return `スタン攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手1体)`;
   if (sk.type === "stunall") return `スタン全体攻撃 / 💎${c} / 💥${sk.dmg * mm}+⚡スタン(相手全員)`;
   if (sk.type === "hold") return `ホールド攻撃 / 💎${c} / 💥${sk.dmg * mm}+⛓ホールド(相手1体)`;
+  if (sk.type === "escort") return `エスコート / 💎${sk.cost} / 🤝味方1体を守る(攻撃されたら💥${sk.dmg}返し)`;
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
@@ -311,9 +313,12 @@ function cardHTML(c, extra, inField) {
     <div class="skills"><div class="catk">①${skillShort(normSkill(c.a1), m)}</div>
     <div class="catk">②${skillShort(normSkill(c.a2), m)}</div></div>
     ${c.guard ? '<i class="gl a">✦</i><i class="gl b">✧</i><i class="gl c">✨</i>' : ""}
-    ${inField && isStunned(c) ? STUN_FX : ""}</div>`;
+    ${inField && isStunned(c) ? STUN_FX : ""}
+    ${inField && c.escortedBy ? WARM_FX : ""}</div>`;
 }
 
+// エスコートされているカードに重ねる、ポカポカあたたかい光
+const WARM_FX = `<div class="warmfx"><i></i><i></i><i></i><i></i><i></i><i></i></div>`;
 // スタン中のカードに重ねる、ピリピリ走る電気と「スタン」の文字
 const STUN_FX = `<div class="stunfx"><svg viewBox="0 0 76 106" preserveAspectRatio="none">
   <polyline class="z1" points="6,8 20,22 12,30 30,44 22,52 40,66"/>
@@ -448,6 +453,7 @@ const SKILL_FORM = {
   stun:      { v1: "ダメージ" },
   stunall:   { v1: "ダメージ" },
   hold:      { v1: "ダメージ" },
+  escort:    { v1: "攻撃返しのダメージ" },
 };
 function updateSkillForm(p) {   // p は "a1" か "a2"
   const f = SKILL_FORM[$("f-" + p + "type").value] || SKILL_FORM.attack;
@@ -1319,14 +1325,14 @@ function playChar(side, card) {
 // 相手の「身代わり」がいるときは、そのキャラしか攻撃対象にできない
 // ホールドされているキャラは、攻撃できない
 function targetsFor(foeSide) {
-  const free = foeSide.field.filter(c => !c.heldBy);
+  const free = foeSide.field.filter(c => !c.heldBy && !c.escortedBy);
   const decoys = free.filter(c => c.decoy > 0);
   return decoys.length > 0 ? decoys : free;
 }
 // 直接攻撃できるか(攻撃できる相手のキャラが1体もいないとき。ホールドされたキャラだけのときもOK)
 const canDirect = foeSide => targetsFor(foeSide).length === 0;
 // ホールドできる相手(ほかをホールド中・防御中のキャラはえらべない)
-const holdTargets = foeSide => targetsFor(foeSide).filter(t => !t.holding && !t.guard);
+const holdTargets = foeSide => targetsFor(foeSide).filter(t => !t.holding && !t.escorting && !t.guard);
 
 // キャラにダメージをあたえる。isAttack=true(キャラの技)ならお守りで0になる。
 // 防御中は半分。防御中でHPが2以上なら、HP0以下になっても1だけ残る
@@ -1382,12 +1388,14 @@ function itemBlock(side, card) {
       if (side.cost < LASER_COST) return `💎が${LASER_COST}つ必要です`;
       return "";
     case "bomb":
-      return foeSide.field.some(c => !c.heldBy) ? "" : "相手の場にキャラがいないので使えません";
+      return foeSide.field.some(c => !c.heldBy && !c.escortedBy) ? "" : "相手の場にキャラがいないので使えません";
     case "amulet":
       return side.field.some(c => !isLocked(c)) ? "" : "お守りをつけられるキャラがいません(ホールド中は不可)";
     case "decoy":
-      return side.field.some(c => !c.heldBy) ? "" : "場にキャラがいないので使えません";
-    case "healChar": case "plush":
+      return side.field.some(c => !c.heldBy && !c.escortedBy) ? "" : "場にキャラがいないので使えません";
+    case "healChar":
+      return side.field.some(c => !inHold(c)) ? "" : "回復できるキャラがいません(ホールド中は不可)";
+    case "plush":
       return side.field.length > 0 ? "" : "場にキャラがいないので使えません";
     case "revive":
       return side.down.some(c => c.type === "char") ? "" : "ダウンしたキャラがいないので使えません";
@@ -1419,6 +1427,7 @@ async function useItem(side, card, target, target2) {
     fx(myInfo, "heal"); popAt(myInfo, "+50", "heal");
     await sleep(900);
   } else if (k === "healChar") {
+    if (inHold(target)) return false;   // ホールド中のキャラは回復できない
     target.hp = Math.min(target.maxHp, target.hp + 50);
     addLog(`${target.name}のHPが回復した`);
     render();
@@ -1435,7 +1444,7 @@ async function useItem(side, card, target, target2) {
     fx(cardEl(target.uid) || myInfo, "heal");
     await sleep(900);
   } else if (k === "bomb") {
-    const list = foeSide.field.filter(t => !t.heldBy);   // ホールドされているキャラには当たらない
+    const list = foeSide.field.filter(t => !t.heldBy && !t.escortedBy);   // ホールド・エスコートされているキャラには当たらない(爆弾は攻撃返しなし)
     const results = list.map(t => ({ t: t, r: hitChar(t, 30, false) }));   // 防御中は半分
     results.forEach(x => addLog(hitLog(x.t, x.r)));
     render();
@@ -1467,7 +1476,7 @@ async function useItem(side, card, target, target2) {
     fx(cardEl(target.uid), "plush");
     await sleep(900);
   } else if (k === "decoy") {
-    if (target.heldBy) return false;
+    if (target.heldBy || target.escortedBy) return false;
     target.decoy = DECOY_TURNS;
     addLog(`${target.name}が身代わりに!(${DECOY_TURNS}ターン)`);
     render();
@@ -1506,7 +1515,7 @@ async function doGuard(side, ch) {
 
 // ----- キャラの技 -----
 const skillOf = (ch, n) => n === 1 ? ch.a1 : ch.a2;
-const isDmgSkill = sk => sk.type !== "heal";
+const isDmgSkill = sk => sk.type !== "heal" && sk.type !== "escort";
 const needsEnemy = sk => sk.type === "attack" || sk.type === "sacrifice" || sk.type === "chance" || sk.type === "stun" || sk.type === "hold";   // 相手1体をえらぶ技
 const isAllSkill = sk => sk.type === "all" || sk.type === "stunall";   // 相手全員への技
 
@@ -1522,10 +1531,43 @@ function stunChar(owner, t) {
 // ----- ホールド -----
 // ch.holding … このキャラがつかまえている相手のキャラ / ch.heldBy … このキャラをつかまえている相手のキャラ
 // どちらも、技・防御・交代・パワーアップ・お守りができない(つかまえている側は「ホールドをやめる」だけできる)
-const isLocked = ch => !!(ch.holding || ch.heldBy);
+// ----- エスコート -----
+// ch.escorting … このキャラが守っている味方 / ch.escortedBy … このキャラを守っている味方
+// どちらも、技・防御・交代・パワーアップ・お守りができない(守っている側は「エスコートをやめる」だけできる)
+// 守られている味方は、相手から攻撃されない。守っている側が攻撃されると、攻撃したキャラに ch.escortDmg ダメージを返す
+const isLocked = ch => !!(ch.holding || ch.heldBy || ch.escorting || ch.escortedBy);
+const inHold = ch => !!(ch.holding || ch.heldBy);   // ホールド中は回復できない
 function releaseHold(ch) {
   if (ch.holding) { ch.holding.heldBy = null; ch.holding = null; }
   if (ch.heldBy) { ch.heldBy.holding = null; ch.heldBy = null; }
+  if (ch.escorting) { ch.escorting.escortedBy = null; ch.escorting = null; }
+  if (ch.escortedBy) { ch.escortedBy.escorting = null; ch.escortedBy = null; }
+}
+// エスコートできる味方(自分以外で、ホールド・エスコートに関わっていないキャラ)
+const escortTargets = (side, ch) => side.field.filter(c => c !== ch && !isLocked(c));
+async function doEscortRelease(side, ch) {
+  if (!ch.escorting) return false;
+  const t = ch.escorting;
+  const oldRect = cardRect(ch.uid);
+  releaseHold(ch);
+  ch.acted = true;
+  addLog(`${who(side)}の${ch.name}は${t.name}のエスコートをやめた`);
+  render();
+  await flyCard(ch.uid, oldRect, 600);   // 元の場所にもどる
+  await sleep(300);
+  return true;
+}
+// エスコートしているキャラが攻撃されたら、攻撃したキャラにダメージを返す
+async function escortCounter(atkSide, attacker, esc) {
+  if (!attacker || attacker.hp <= 0 || G.over || !esc || !esc.escortDmg) return;
+  const r = hitChar(attacker, esc.escortDmg, true);
+  addLog(`${esc.name}の攻撃返し!${attacker.name}に${r.dmg}ダメージ`);
+  render();
+  const el = cardEl(attacker.uid);
+  if (r.blocked) { fx(el, "guard"); popAt(el, "0", "zero"); }
+  else { fx(el, "counter"); popAt(el, "-" + r.dmg); }
+  await sleep(800);
+  if (attacker.hp <= 0) await sendDown(atkSide, attacker);
 }
 async function doRelease(side, ch) {
   if (!ch.holding) return false;
@@ -1552,7 +1594,7 @@ async function flyCard(uid, oldRect, ms) {
   ghost.className = "flyghost";
   ghost.innerHTML = el.outerHTML;
   const g = ghost.firstElementChild;
-  g.classList.remove("held", "stun", "targetable");
+  g.classList.remove("held", "stun", "targetable", "escorted");
   g.style.animation = "none";
   ghost.style.cssText = `left:${oldRect.left}px;top:${oldRect.top}px;transform:scale(${oldRect.width / base});transition:none;`;
   document.body.appendChild(ghost);
@@ -1586,7 +1628,9 @@ function skillBlock(side, ch, n) {
   if (ch.acted) return "行動ずみ";
   if (side.cost < sk.cost * mult) return "コスト不足";
   if (isAllSkill(sk) && foeSide.field.length === 0) return "相手の場にキャラがいない";
-  if (isAllSkill(sk) && foeSide.field.every(c => c.heldBy)) return "攻撃できる相手がいない";
+  if (isAllSkill(sk) && foeSide.field.every(c => c.heldBy || c.escortedBy)) return "攻撃できる相手がいない";
+  if (sk.type === "escort" && escortTargets(side, ch).length === 0) return "エスコートできる味方がいない";
+  if (sk.type === "heal" && !side.field.some(c => !inHold(c))) return "回復できる味方がいない";
   if (needsEnemy(sk) && canDirect(foeSide) && ch.fresh) return "出したばかりで直接攻撃できない";
   if (sk.type === "hold" && !canDirect(foeSide) && holdTargets(foeSide).length === 0) return "ホールドできる相手がいない(防御中は不可)";
   return "";
@@ -1598,7 +1642,9 @@ async function doSkill(side, ch, n, target) {
   const foeSide = foe(side);
   if (skillBlock(side, ch, n)) return false;
   if (sk.type === "heal") {
-    if (!target || !side.field.includes(target)) return false;
+    if (!target || !side.field.includes(target) || inHold(target)) return false;   // ホールド中のキャラは回復できない
+  } else if (sk.type === "escort") {
+    if (!target || !escortTargets(side, ch).includes(target)) return false;
   } else if (needsEnemy(sk)) {
     if (target) { if (!targetsFor(foeSide).includes(target)) return false; }
     else if (!canDirect(foeSide)) return false;
@@ -1614,6 +1660,21 @@ async function doSkill(side, ch, n, target) {
   G.acting = ch.uid;
   render();
   if (isAI(side)) await wait(800);             // CPUのときは、誰が動くか見せる
+
+  // エスコート:えらんだ味方の前に、半分重なるように移動する
+  if (sk.type === "escort") {
+    G.acting = null;
+    const oldRect = cardRect(ch.uid);
+    ch.escorting = target; target.escortedBy = ch; ch.escortDmg = sk.dmg;
+    ch.guard = false; target.guard = false; target.decoy = 0;
+    addLog(`${ch.name}は${target.name}をエスコート!(攻撃されたら${sk.dmg}返し)`);
+    render();
+    await flyCard(ch.uid, oldRect, 700);
+    fx(cardEl(target.uid), "warm");
+    await sleep(700);
+    render();
+    return true;
+  }
 
   // 回復
   if (sk.type === "heal") {
@@ -1650,8 +1711,8 @@ async function doSkill(side, ch, n, target) {
   const dmg = sk.dmg * mult;
   const stun = sk.type === "stun" || sk.type === "stunall";
   if (isAllSkill(sk)) {
-    const list = foeSide.field.filter(t => !t.heldBy);   // ホールドされているキャラには当たらない
-    const results = list.map(t => ({ t: t, r: hitChar(t, dmg, true) }));
+    const list = foeSide.field.filter(t => !t.heldBy && !t.escortedBy);   // ホールド・エスコートされているキャラには当たらない
+    const results = list.map(t => ({ t: t, r: hitChar(t, dmg, true), esc: !!t.escorting }));
     results.forEach(x => addLog(hitLog(x.t, x.r)));
     // スタン全体攻撃:お守りで防いだキャラ以外は、スタン
     if (stun) results.forEach(x => { if (!x.r.blocked && x.t.hp > 0) stunChar(foeSide, x.t); });
@@ -1666,6 +1727,8 @@ async function doSkill(side, ch, n, target) {
     // ホールドしているキャラに当たったら、ホールドされているキャラ(こちらのキャラ)にも同じダメージ
     for (const x of results) if (x.t.holding && !x.r.blocked) await holdSpill(side, x.t.holding, dmg);
     for (const x of results) if (x.t.hp <= 0) await sendDown(foeSide, x.t);
+    // エスコートしているキャラを攻撃したら、攻撃返し
+    for (const x of results) if (x.esc) await escortCounter(side, ch, x.t);
   } else if (target) {
     const r = hitChar(target, dmg, true);
     addLog(hitLog(target, r));
@@ -1685,8 +1748,10 @@ async function doSkill(side, ch, n, target) {
     if (r.blocked) { fx(tel, "guard"); popAt(tel, "0", "zero"); }
     else { fx(tel, holdNow ? "chain" : stun ? "zap" : "slash"); popAt(tel, "-" + r.dmg); if (r.survived) fx(tel, "guard"); }
     await sleep(900);
+    const wasEscorting = !!target.escorting;
     if (spillTo && !r.blocked) await holdSpill(side, spillTo, dmg);
     if (target.hp <= 0) await sendDown(foeSide, target);
+    if (wasEscorting) await escortCounter(side, ch, target);   // エスコートしているキャラを攻撃したら、攻撃返し
   } else {
     foeSide.hp -= dmg;
     react(side, "笑顔"); react(foeSide, "苦しい");
@@ -1806,6 +1871,8 @@ const FX = {
   power:  { e: ["✨", "⭐", "🌟", "💫", "✦", "✧"], n: 30, ring: "#ffd700", gold: true },
   zap:    { e: ["⚡", "⚡", "✨", "💥"], n: 12, line: true, ring: "#ffe600" },
   chain:  { e: ["⛓️", "⛓️", "✨", "💥"], n: 10, line: true, ring: "#b8c0cc" },
+  warm:   { e: ["💛", "🧡", "✨", "☀️"], n: 10, rise: true, ring: "#ffb347" },
+  counter:{ e: ["💢", "💥", "✨"], n: 10, line: true, ring: "#ff8a3d" },
 };
 
 function cardEl(uid) {
@@ -1911,9 +1978,15 @@ function aiAction(side, ch) {
     const mult = isDmgSkill(sk) && ch.plush ? 2 : 1;
     let score = 0, target = null;
     if (sk.type === "heal") {
-      const t = side.field.filter(c => c.maxHp - c.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      const t = side.field.filter(c => c.maxHp - c.hp > 0 && !inHold(c)).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
       if (!t || t.hp / t.maxHp > 0.6) return;               // あまりダメージを受けていなければ使わない
       score = Math.min(sk.heal, t.maxHp - t.hp) * 0.8;
+      target = t;
+    } else if (sk.type === "escort") {
+      // 弱っている味方を、元気なときに守る
+      const t = escortTargets(side, ch).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (!t || t.hp / t.maxHp > 0.5 || ch.hp / ch.maxHp < 0.5 || foeSide.field.length === 0) return;
+      score = 22;
       target = t;
     } else if (isAllSkill(sk)) {
       score = foeSide.field.filter(t => !t.heldBy).reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
@@ -1936,6 +2009,7 @@ function aiAction(side, ch) {
       if (sk.type === "stun" && target && !isStunned(target) && !target.amulet) score += 10;
       if (sk.type === "hold" && target && !target.amulet && target.hp > effDmg(target, dmg, true)) score += 6;
       if (target && target.holding) score -= Math.min(target.holding.hp, dmg) * 0.8;   // 自分のキャラにもダメージが行く
+      if (target && target.escorting) score -= Math.min(ch.hp, target.escortDmg || 0) * 0.7;   // 攻撃返しを受ける
       if (sk.type === "sacrifice") score -= sk.self * 0.7;
     }
     if (score > 0 && (!best || score > best.score)) best = { n: n, target: target, score: score };
@@ -1963,7 +2037,7 @@ async function aiPlay(side) {
     if (k === "healPlayer") {
       if (side.hp <= 50) await useItem(side, card);
     } else if (k === "healChar") {
-      const t = side.field.filter(c => c.maxHp - c.hp >= 30).sort((a, b) => a.hp - b.hp)[0];
+      const t = side.field.filter(c => c.maxHp - c.hp >= 30 && !inHold(c)).sort((a, b) => a.hp - b.hp)[0];
       if (t) await useItem(side, card, t);
     } else if (k === "revive") {
       const t = side.down.filter(c => c.type === "char").sort((a, b) => b.maxHp - a.maxHp)[0];
@@ -1976,7 +2050,7 @@ async function aiPlay(side) {
       const t = side.field.filter(c => !c.amulet && !isLocked(c)).sort((a, b) => b.hp - a.hp)[0];
       if (t && foeSide.field.length > 0) await useItem(side, card, t);
     } else if (k === "decoy") {
-      const t = side.field.filter(c => !c.heldBy).sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
+      const t = side.field.filter(c => !c.heldBy && !c.escortedBy).sort((a, b) => b.hp - a.hp)[0];     // いちばんHPが高いキャラを身代わりに
       if (t && side.field.length >= 2 && foeSide.field.length > 0 && !side.field.some(c => c.decoy > 0)) await useItem(side, card, t);
     } else if (k === "swap") {
       const f = side.field.filter(c => !c.power && !isStunned(c) && !isLocked(c) && c.hp <= c.maxHp * 0.35).sort((a, b) => a.hp - b.hp)[0];
@@ -2018,6 +2092,7 @@ async function aiPlay(side) {
   for (const ch of side.field.slice()) {
     if (G.over) return;
     if (ch.holding && ch.hp <= ch.maxHp * 0.3) { await doRelease(side, ch); await wait(500); continue; }   // あぶなくなったらホールドをやめる
+    if (ch.escorting && (ch.hp <= ch.maxHp * 0.3 || ch.escorting.hp >= ch.escorting.maxHp * 0.8)) { await doEscortRelease(side, ch); await wait(500); continue; }
     if (ch.acted || isStunned(ch) || isLocked(ch)) continue;   // スタン中・ホールド中は何もできない
     const act = aiAction(side, ch);
     if (!act) { await doGuard(side, ch); await wait(600); continue; }
@@ -2049,6 +2124,12 @@ function fieldHTML(list, top) {
     const c = list[i];
     if (!c) { h += '<div class="slot"></div>'; continue; }
     if (c.heldBy) { h += '<div class="slot heldslot">⛓</div>'; continue; }
+    if (c.escorting) { h += '<div class="slot heldslot">🤝</div>'; continue; }   // エスコート中は、守る味方のところへ行っている
+    if (c.escortedBy) {
+      const dir = isPvp() || !top ? "up" : "down";   // 守るキャラは、相手のほう(前)に立つ
+      h += `<div class="holdpair escortpair ${dir}">${cardHTML(c, " escorted", true)}<div class="heldwrap escortwrap">${cardHTML(c.escortedBy, "", true)}</div></div>`;
+      continue;
+    }
     if (c.holding) {
       const dir = isPvp() || !top ? "up" : "down";   // 相手のほうへ引き寄せる(上の場なら下向き)
       h += `<div class="holdpair ${dir}">${cardHTML(c, "", true)}<div class="heldwrap">${cardHTML(c.holding, " held", true)}${CHAIN_FX}</div></div>`;
@@ -2246,7 +2327,8 @@ function itemMenu(card) {
     const prompt = k === "healChar" ? "回復するキャラをタップ"
       : k === "amulet" ? "お守りをつけるキャラをタップ"
       : k === "plush" ? "ぬいぐるみをわたすキャラをタップ" : "身代わりにするキャラをタップ";
-    const list = k === "amulet" ? p.field.filter(c => !isLocked(c)) : k === "decoy" ? p.field.filter(c => !c.heldBy) : p.field;
+    const list = k === "amulet" ? p.field.filter(c => !isLocked(c)) : k === "decoy" ? p.field.filter(c => !c.heldBy && !c.escortedBy)
+      : k === "healChar" ? p.field.filter(c => !inHold(c)) : p.field;
     use("使う(対象をえらぶ)", () => startTarget(prompt, list, ch => run(() => useItem(p, card, ch))));
   } else if (k === "revive") {
     use("使う(復活させるキャラをえらぶ)", () => {
@@ -2277,6 +2359,7 @@ function skillBtnLabel(sk, n, m) {
     stun: `💎${c} 💥${sk.dmg * mm}+⚡スタン`,
     stunall: `💎${c} 全体💥${sk.dmg * mm}+⚡スタン`,
     hold: `💎${c} 💥${sk.dmg * mm}+⛓ホールド`,
+    escort: `💎${sk.cost} 🤝エスコート(返し💥${sk.dmg})`,
   }[sk.type] || `💎${c} 💥${sk.dmg * mm}`;
   return `${n === 1 ? "①" : "②"} ${sk.name}(${body})`;
 }
@@ -2290,7 +2373,14 @@ function fieldMenu(ch) {
     ] });
     return;
   }
+  if (ch.escorting) {   // エスコートしているときは「エスコートをやめる」だけ
+    openMenu({ card: ch, note: `🤝${ch.escorting.name}をエスコート中:技・防御はできません(攻撃されたら💥${ch.escortDmg}返し)`, buttons: [
+      { label: "エスコートをやめる", action: () => run(() => doEscortRelease(p, ch)) },
+    ] });
+    return;
+  }
   let note = ch.heldBy ? `⛓${ch.heldBy.name}にホールドされていて動けません`
+    : ch.escortedBy ? `🤝${ch.escortedBy.name}にエスコートされていて動けません(相手から攻撃されません)`
     : isStunned(ch) ? "⚡スタン中:このターンは技も防御もできません" : ch.acted ? "このターンはもう行動しました" : "";
   if (!ch.acted && ch.plush) note = "🧸次の攻撃は、💎も2倍・ダメージも2倍";
   if (!ch.acted && ch.fresh) note += (note ? " / " : "") + "出したばかりなので、直接攻撃はできません";
@@ -2313,7 +2403,11 @@ function chooseSkillTarget(ch, n) {
   const foeSide = opp();
   if (isAllSkill(sk)) { run(() => doSkill(p, ch, n, null)); return; }
   if (sk.type === "heal") {
-    startTarget("回復するキャラをタップ", p.field, t => run(() => doSkill(p, ch, n, t)));
+    startTarget("回復するキャラをタップ", p.field.filter(c => !inHold(c)), t => run(() => doSkill(p, ch, n, t)));
+    return;
+  }
+  if (sk.type === "escort") {
+    startTarget("エスコートする味方をタップ", escortTargets(p, ch), t => run(() => doSkill(p, ch, n, t)));
     return;
   }
   if (canDirect(foeSide)) { run(() => doSkill(p, ch, n, null)); return; }   // 攻撃できる相手がいなければ直接攻撃
