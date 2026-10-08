@@ -325,7 +325,7 @@ const STUN_FX = `<div class="stunfx"><svg viewBox="0 0 76 106" preserveAspectRat
   <polyline class="z2" points="70,14 54,28 62,36 44,50 52,58 34,74"/>
   <polyline class="z3" points="8,96 24,80 16,72 36,60 30,52 48,40"/>
   <polyline class="z4" points="68,98 56,84 64,76 50,64 58,56 42,46"/>
-</svg><span>スタン</span></div>`;
+</svg><span>STUN</span></div>`;
 
 // 大きいカード(タップしたときのメニューに表示)  mini=true なら並べて見られる小さめ版、
 // compact=true なら「絵が左、くわしい情報が右」のよこ向き(メニュー用。画面に収まるように)
