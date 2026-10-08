@@ -353,7 +353,10 @@ function bigCardHTML(c, mini, compact) {
     <div class="batk">① ${esc(normSkill(c.a1).name)}<br>${skillDetail(normSkill(c.a1), m)}</div>
     <div class="batk">② ${esc(normSkill(c.a2).name)}<br>${skillDetail(normSkill(c.a2), m)}</div>`;
   const hasInfo = hasDetail(c) ? " has-info" : "";
-  return `<div class="${cls}${hasInfo}"><div class="bart">${artFullHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
+  // メニュー用(compact)は、うしろに同じ絵をぼかして敷く(絵の形が枠と合わないときも、すき間が自然になる)
+  const src = c.full || c.img;
+  const bg = compact && src ? ` style="--bg:url('${src}')"` : "";
+  return `<div class="${cls}${hasInfo}"><div class="bart${bg ? " hasbg" : ""}"${bg}>${artFullHTML(c)}</div>${compact ? `<div class="side">${body}</div>` : body}${detailBtn(c)}</div>`;
 }
 
 // ---------- キャラクター情報(【詳細】ボタン) ----------
@@ -2218,12 +2221,38 @@ function render() {
 // ----- メニュー -----
 function closeMenu() { $("menu").classList.remove("open"); }
 // メニューが画面からはみ出すときは、カードの部分を小さくして、ボタンが全部見えるようにする
+// カード部分は、ボタンが全部入る範囲で、できるだけ大きくする。絵の枠は、絵と同じ形(たて横の比)にする
 function fitMenu() {
   const panel = $("menu-panel"), big = panel.querySelector(".big");
   if (!big) return;
-  big.style.maxHeight = "";
-  const over = panel.scrollHeight - panel.clientHeight;
-  if (over > 0) big.style.maxHeight = Math.max(80, big.offsetHeight - over - 2) + "px";
+  const art = big.querySelector(".bart"), img = art && art.querySelector("img");
+  const side = big.querySelector(".side");
+  big.style.maxHeight = ""; big.style.height = "";
+  if (art) { art.style.width = ""; art.style.flexBasis = ""; }
+  if (!big.classList.contains("compact") || !side) {   // 横向きでないカードは、はみ出す分だけ縮める
+    const over = panel.scrollHeight - panel.clientHeight;
+    if (over > 0) big.style.maxHeight = Math.max(80, big.offsetHeight - over - 2) + "px";
+    return;
+  }
+  const maxPanel = Math.floor(window.innerHeight * 0.92);
+  const others = panel.scrollHeight - big.offsetHeight;          // カード以外(コスト・説明・ボタン)の高さ
+  const room = maxPanel - others - 4;                             // カードに使える高さ
+  const sideH = side.scrollHeight;                                // 技の説明に必要な高さ
+  let h = Math.min(room, Math.round(window.innerHeight * 0.48));  // 大きすぎないように
+  h = Math.max(h, Math.min(sideH, room), 90);
+  big.style.height = h + "px";
+  if (art && img) {
+    const setW = () => {
+      if (!img.naturalWidth) return;
+      const want = Math.round(h * img.naturalWidth / img.naturalHeight);   // 絵と同じ形の横幅
+      const maxW = Math.round(big.clientWidth * 0.6);                      // 説明の場所も残す
+      const w = Math.min(want, maxW);
+      art.style.width = w + "px"; art.style.flexBasis = w + "px";
+      // 横幅が足りなくて絵が小さくなるときは、カードの高さも絵に合わせる(上下のすき間を作らない)
+      if (w < want) big.style.height = Math.max(Math.round(w * img.naturalHeight / img.naturalWidth), Math.min(sideH, room), 90) + "px";
+    };
+    if (img.complete) setW(); else img.onload = setW;
+  }
 }
 // opt: card(大きく見せるカード) title msg note buttons noClose
 function openMenu(opt) {
