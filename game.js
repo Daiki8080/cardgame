@@ -263,10 +263,10 @@ function skillDetail(sk, m) {
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
-// リボンの色(技①の種類で決まる。パワーアップは金色)と、HPバッジの色
+// リボンの色(通常カードは赤、パワーアップは金色)と、HPバッジの色
 function kindCls(c) {
   if (c.power || isPower(c)) return "k-power";
-  return "k-" + normSkill(c.a1).type;
+  return "k-attack";
 }
 function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? "y" : "r"; }
 
