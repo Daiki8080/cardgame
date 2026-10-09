@@ -1167,3 +1167,23 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 }
 #menu-panel .big.compact.has-info { padding-bottom: 0; }
 #menu-panel .big.compact.has-info .side { padding-bottom: 24px; }   /* 【詳細】ボタンの場所は、説明の側だけにとる */
+
+/* ===== カードを見るポップ ===== */
+.topbar { gap: 8px; }
+#viewer { display: none; position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.72); align-items: center; justify-content: center; }
+#viewer.open { display: flex; }
+#viewer-panel { width: 94%; max-width: 440px; max-height: 88dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px 14px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+#viewer-head { position: sticky; top: -10px; z-index: 2; display: flex; align-items: center; gap: 8px; margin: -10px -12px 4px; padding: 10px 12px 6px;
+  background: var(--panel); border-bottom: 1px solid var(--panel-line); }
+#viewer-head h3 { flex: 1; margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#viewer-close { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--ghost-line); background: var(--ghost-bg);
+  color: var(--text); font-size: 22px; line-height: 30px; padding: 0; }
+#viewer-note { margin: 4px 0 6px; }
+.vlabel { margin: 10px 0 6px; font-size: 13px; font-weight: bold; color: var(--accent); }
+.vgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; justify-items: center; }
+.vhand { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; -webkit-overflow-scrolling: touch; }
+.vhand .vcard { flex: none; }
+.vcard { position: relative; cursor: pointer; }
+.viewer-one .big { margin: 6px auto 10px; max-width: 320px; }
+#viewer-back { width: 100%; }

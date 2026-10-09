@@ -838,11 +838,14 @@ function renderDeckManage() {
         const p = deckParts(d);
         const warn = p.normals.length === DECK_CHAR ? "" : " ⚠ 通常カードが10枚に足りません";
         return `<div class="deck-row"><div class="dname">${esc(d.name)}<small>通常${p.normals.length}/${DECK_CHAR}枚 + パワーアップ${p.powers.length}枚${warn}</small></div>
+          <button class="btn small ghost" data-view="${d.id}">閲覧</button>
           <button class="btn small" data-edit="${d.id}">編集</button>
           <button class="btn small danger" data-deldeck="${d.id}">削除</button></div>`;
       }).join("");
 }
 $("deck-rows").addEventListener("click", e => {
+  const viewBtn = e.target.dataset.view;
+  if (viewBtn) { viewDeck(viewBtn); return; }
   const editBtn = e.target.dataset.edit;
   const delBtn = e.target.dataset.deldeck;
   if (editBtn) openDeckEdit(editBtn);
@@ -2901,6 +2904,60 @@ $("btn-import-replace").onclick = () => {
   if (!confirm("今のカード・デッキはすべて消えて、バックアップの内容になります。よろしいですか?")) return;
   finishImport(importData.cards, importData.decks || [], importData.sel || {}, importData.story || null);
 };
+
+// ---------- ⑭ カードを見るポップ(作成済みカード一覧・デッキの閲覧) ----------
+// 入力中の内容には、なにもさわらない(×で閉じれば、そのまま続きを入力できる)
+const VIEW = { list: [], mode: "grid", title: "", note: "", pick: null };
+function openViewer(title, note, list, mode) {
+  Object.assign(VIEW, { title, note, list, mode, pick: null });
+  drawViewer();
+  $("viewer").classList.add("open");
+}
+function closeViewer() { $("viewer").classList.remove("open"); }
+function drawViewer() {
+  $("viewer-title").textContent = VIEW.pick ? VIEW.pick.name : VIEW.title;
+  const body = $("viewer-body");
+  if (VIEW.pick) {   // 1枚をくわしく見る
+    $("viewer-note").textContent = "";
+    body.innerHTML = `<div class="viewer-one">${bigCardHTML(VIEW.pick)}</div>
+      <button id="viewer-back" class="btn small ghost">← 一覧にもどる</button>`;
+    return;
+  }
+  $("viewer-note").textContent = VIEW.note;
+  const card = c => `<div class="vcard" data-vid="${esc(c.id)}">${cardHTML(c)}</div>`;
+  if (VIEW.list.length === 0) { body.innerHTML = '<p class="note">カードがありません。</p>'; return; }
+  if (VIEW.mode === "hand") {   // 手札のように横に並べる
+    const n = VIEW.list.filter(c => !isPower(c)), p = VIEW.list.filter(isPower);
+    body.innerHTML = `<div class="vlabel">通常カード ${n.length}枚</div><div class="vhand">${n.map(card).join("")}</div>`
+      + (p.length ? `<div class="vlabel">パワーアップカード ${p.length}枚</div><div class="vhand">${p.map(card).join("")}</div>` : "");
+    return;
+  }
+  // フォルダごとに並べる
+  const groups = allFolders().map(f => ({ label: "📁 " + f, list: VIEW.list.filter(c => c.folder === f) }))
+    .concat([{ label: "フォルダなし", list: VIEW.list.filter(c => !c.folder) }]).filter(g => g.list.length);
+  body.innerHTML = groups.map(g => `<div class="vlabel">${esc(g.label)}(${g.list.length}枚)</div><div class="vgrid">${g.list.map(card).join("")}</div>`).join("");
+}
+$("viewer").addEventListener("click", e => {
+  if (e.target.id === "viewer" || e.target.id === "viewer-close") {   // ×か外側で閉じる(くわしく見ているときは一覧にもどる)
+    if (VIEW.pick && e.target.id === "viewer") { VIEW.pick = null; drawViewer(); return; }
+    closeViewer(); return;
+  }
+  if (e.target.id === "viewer-back") { VIEW.pick = null; drawViewer(); $("viewer-panel").scrollTop = 0; return; }
+  const v = e.target.closest(".vcard");
+  if (v) { VIEW.pick = VIEW.list.find(c => c.id === v.dataset.vid) || null; drawViewer(); $("viewer-panel").scrollTop = 0; }
+});
+// カード作成:作成済みのカードを見る
+$("btn-view-cards").onclick = () => {
+  const cards = loadCards();
+  openViewer("作成済みカード", `${cards.length}枚。カードをタップすると、くわしく見られます。`, cards, "grid");
+};
+// デッキ編成:デッキを閲覧
+function viewDeck(id) {
+  const d = loadDecks().find(x => x.id === id);
+  if (!d) return;
+  const list = deckCards(d);
+  openViewer(d.name, "カードをタップすると、くわしく見られます。", list, "hand");
+}
 
 document.body.dataset.theme = "royal";   // デザインは ROYAL(ネイビー × ゴールド)
 

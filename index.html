@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="style.css?v=43">
 </head>
 <body>
 
@@ -111,7 +111,7 @@
 
 <!-- ===== カード作成画面 ===== -->
 <section id="screen-create" class="screen">
-  <div class="topbar"><button class="btn small ghost" data-go="title">← タイトルへ</button></div>
+  <div class="topbar"><button class="btn small ghost" data-go="title">← タイトルへ</button><button id="btn-view-cards" class="btn small ghost">📋 作成済みカード</button></div>
   <h2 id="create-title">カード作成</h2>
 
   <label>つくったカードを直す</label>
@@ -287,6 +287,15 @@
   </div>
 </section>
 
+<!-- ===== カードを見るポップ(作成済みカード一覧・デッキの閲覧) ===== -->
+<div id="viewer">
+  <div id="viewer-panel">
+    <div id="viewer-head"><h3 id="viewer-title"></h3><button id="viewer-close" aria-label="閉じる">×</button></div>
+    <p id="viewer-note" class="note"></p>
+    <div id="viewer-body"></div>
+  </div>
+</div>
+
 <!-- ===== メニュー(カードをタップしたとき) ===== -->
 <div id="menu"><div id="menu-panel"></div></div>
 
@@ -338,7 +347,7 @@
   </div>
 </div>
 
-<script src="story.js?v=42"></script>
-<script src="game.js?v=42"></script>
+<script src="story.js?v=43"></script>
+<script src="game.js?v=43"></script>
 </body>
 </html>
