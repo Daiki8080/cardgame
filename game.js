@@ -1854,11 +1854,17 @@ function finishGame(playerWon) {
   // 勝ったら、次の話へ進んだことを保存(前のストーリーを遊びなおしたときは、進み具合をもどさない)
   if (G.story && playerWon) saveStory({ ch: Math.max(loadStory().ch || 0, SS.ch + 1) });
   const story = G.story;
+  const chap = story ? storyList()[SS.ch] : null;
   setTimeout(() => {
-    $("result-title").textContent = playerWon ? "🎉 勝利!" : "😢 敗北…";
-    if (story) showStoryResult(playerWon ? "win" : "lose");
-    else showStoryResult("");
-    show("result");
+    const result = () => {
+      $("result-title").textContent = playerWon ? (story ? `🎉 ストーリー${SS.ch + 1} クリア!` : "🎉 勝利!") : "😢 敗北…";
+      if (story) showStoryResult(playerWon ? "win" : "lose");
+      else showStoryResult("");
+      show("result");
+    };
+    // ストーリーで勝ったら、バトルのあとの会話(story.js の after)を見せてから
+    if (story && playerWon && chap && Array.isArray(chap.after) && chap.after.length) playTalk(chap.after, "", result);
+    else result();
   }, 1500);
 }
 
@@ -2684,9 +2690,10 @@ function playTalk(lines, title, after) {
   // さいしょに話のタイトルを出す(タップ or 少し待つと消える)
   const tc = $("talk-chapter");
   $("talk-chapter-title").textContent = title;
-  tc.classList.add("show");
   SS.intro = true;
   clearTimeout(SS.introTimer);
+  if (!title) { endIntro(); return; }   // タイトルなし(バトルのあとの会話など)は、すぐ始める
+  tc.classList.add("show");
   SS.introTimer = setTimeout(endIntro, 1800);
 }
 function endIntro() {
@@ -2712,6 +2719,12 @@ function nextLine() {
   // 「暗転」:画面をまっ暗にして、文字だけ出す
   const dark = mood === "暗転";
   $("screen-talk").classList.toggle("blackout", dark);
+  // 「揺れ」:画面ごとガタガタゆれる
+  const scr = $("screen-talk");
+  scr.classList.remove("quake"); if (mood === "揺れ") { void scr.offsetWidth; scr.classList.add("quake"); }
+  // 「消える」:そのキャラの絵がうすくなって消える(名前は出さず、文はナレーションとして出す)
+  const vanish = mood === "消える";
+  if (vanish) { $("talk-name").classList.add("hidden"); $("talk-box").classList.add("narration"); }
   pt.classList.remove("glow-red");
   ["red"].forEach(g => pt.classList.toggle("glow-" + g, storyGlow(name) === g));
   const chara = storyChars()[name];   // story.js の STORY_CHARS にいるキャラ(表情つき)
@@ -2726,6 +2739,9 @@ function nextLine() {
       pt.classList.remove("in"); void pt.offsetWidth; pt.classList.add("in");
     }
     // 表情を切りかえる(同じキャラなら、絵だけ入れかえる)
+    pt.classList.remove("vanish", "shiver");
+    if (vanish) { void pt.offsetWidth; pt.classList.add("vanish"); }
+    if (mood === "震える") { void pt.offsetWidth; pt.classList.add("shiver"); }   // 「震える」:絵がブルブルふるえる
     if (chara) {
       const im = pt.querySelector("img");
       im.src = pickFace(chara, mood);
