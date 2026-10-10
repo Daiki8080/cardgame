@@ -1226,3 +1226,6 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
   40% { transform: translate(8px, 3px); } 50% { transform: translate(-5px, 5px); } 60% { transform: translate(6px, -4px); }
   70% { transform: translate(-7px, 2px); } 80% { transform: translate(5px, 4px); } 90% { transform: translate(-3px, -2px); }
 }
+
+/* カードを見るポップ:見出しをカードより前に出す(スクロールしても重ならない) */
+#viewer-head { z-index: 20; background: var(--panel); box-shadow: 0 4px 10px rgba(0,0,0,.4); }
