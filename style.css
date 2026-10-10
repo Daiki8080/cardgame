@@ -1187,3 +1187,21 @@ textarea { width: 100%; padding: 10px; font-size: 16px; font-family: var(--font-
 .vcard { position: relative; cursor: pointer; }
 .viewer-one .big { margin: 6px auto 10px; max-width: 320px; }
 #viewer-back { width: 100%; }
+
+/* ===== ストーリー:暗転・あやつられたキャラの赤い光 ===== */
+#screen-talk.blackout { background: #000; }
+#screen-talk.blackout #talk-portrait { opacity: 0; }
+#screen-talk.blackout #talk-box { background: rgba(0,0,0,.9); border-color: rgba(230,192,104,.4); }
+#talk-portrait.glow-red img { filter: drop-shadow(0 0 10px #ff2020) drop-shadow(0 0 22px rgba(255,0,0,.7)) saturate(1.2);
+  animation: redPulse 1.6s ease-in-out infinite; }
+@keyframes redPulse {
+  0%, 100% { filter: drop-shadow(0 0 6px #ff2020) drop-shadow(0 0 14px rgba(255,0,0,.5)); }
+  50%      { filter: drop-shadow(0 0 14px #ff3030) drop-shadow(0 0 30px rgba(255,0,0,.9)) brightness(1.1); }
+}
+.info .face.cardface img { object-position: center top; }
+.info .face.glow-red { border-color: #ff3b3b; animation: faceRed 1.4s ease-in-out infinite; }
+.info .face.glow-red img { filter: sepia(.35) saturate(1.6) hue-rotate(-20deg); }
+@keyframes faceRed {
+  0%, 100% { box-shadow: 0 0 6px 1px rgba(255,40,40,.7); }
+  50%      { box-shadow: 0 0 14px 4px rgba(255,30,30,1); }
+}

@@ -263,10 +263,10 @@ function skillDetail(sk, m) {
   return `攻撃 / 💎${c} / 💥${sk.dmg * mm}`;
 }
 
-// リボンの色(通常カードは赤、パワーアップは金色)と、HPバッジの色
+// リボンの色(技①の種類で決まる。パワーアップは金色)と、HPバッジの色
 function kindCls(c) {
   if (c.power || isPower(c)) return "k-power";
-  return "k-attack";
+  return "k-" + normSkill(c.a1).type;
 }
 function hpCls(hp, max) { const r = hp / max; return r > 0.5 ? "g" : r > 0.25 ? "y" : "r"; }
 
@@ -1201,6 +1201,7 @@ async function startBattle(storyMode) {
         playerName: chap ? storyPlayer() : "" };
   // ストーリーでは、プレイヤーと敵の顔アイコンを出す(表情は mood で切りかえ)
   G.faces = { player: chap ? faceSet(G.playerName) : null, cpu: chap ? faceSet(G.enemyName) : null };
+  G.enemyGlow = chap ? storyGlow(G.enemyName) : "";   // あやつられている敵は赤く光る
   G.mood = { player: "通常", cpu: "通常" };
   G.faceT = {};
   T = null;
@@ -2120,7 +2121,8 @@ function infoHTML(side, label, showHand, name) {
       <button class="btn small endbtn" data-end="${name}"${on ? " disabled" : ""}>ターン終了</button>`;
   }
   const face = faceSrc(name);   // ストーリーの顔アイコン
-  return `${face ? `<div class="face"><img id="face-${name}" src="${face}" alt=""></div>` : ""}<div class="who${face ? " named" : ""}">${label}</div>
+  const fcls = (G.faces && G.faces[name] && G.faces[name].fromCard ? " cardface" : "") + (name === "cpu" && G.enemyGlow ? " glow-" + G.enemyGlow : "");
+  return `${face ? `<div class="face${fcls}"><img id="face-${name}" src="${face}" alt=""></div>` : ""}<div class="who${face ? " named" : ""}">${label}</div>
     ${barHTML(side, side.hp, START_HP, "big", "HP " + Math.max(0, side.hp))}
     <div class="gemsbox">${gemsHTML(side.cost)}</div>
     <div class="stats"><div class="stat">📚${side.deck.length}</div><div class="stat">☠${side.down.length}</div>${showHand ? `<div class="stat">✋${side.hand.length}</div>` : ""}</div>`;
@@ -2569,7 +2571,16 @@ function sameName(a, b) {
 // バトルの顔アイコン(story.js の STORY_CHARS の icon)
 function faceSet(name) {
   const c = storyChars()[name];
-  return c && c.icon ? c.icon : null;
+  if (c && c.icon) return c.icon;
+  // STORY_CHARS に顔アイコンがないときは、同じ名前で作ったカードの絵を使う
+  const card = speakerCard(name);
+  const src = card && (card.full || card.img);
+  return src ? { "通常": src, fromCard: true } : null;
+}
+// その話で、光らせるキャラ(story.js の glow: { "リュウ": "red" })
+function storyGlow(name) {
+  const chap = storyList()[SS.ch];
+  return chap && chap.glow && name ? (chap.glow[name] || "") : "";
 }
 function faceSrc(name) {
   if (!G || !G.faces || !G.faces[name]) return "";
@@ -2698,10 +2709,15 @@ function nextLine() {
   $("talk-box").classList.toggle("narration", !name);
   const pt = $("talk-portrait");
   const mood = Array.isArray(line) ? (line[2] || "") : (line.face || "");
+  // 「暗転」:画面をまっ暗にして、文字だけ出す
+  const dark = mood === "暗転";
+  $("screen-talk").classList.toggle("blackout", dark);
+  pt.classList.remove("glow-red");
+  ["red"].forEach(g => pt.classList.toggle("glow-" + g, storyGlow(name) === g));
   const chara = storyChars()[name];   // story.js の STORY_CHARS にいるキャラ(表情つき)
   const card = chara ? null : speakerCard(name);
   const hasArt = !!chara || !!(card && (card.full || card.img || card.emoji));
-  if (name && hasArt) {
+  if (name && hasArt && !dark) {
     const key = chara ? "chara:" + name : card ? card.id : "none:" + name;
     if (pt.dataset.key !== key) {   // ちがうキャラになったら、下からふわっと出す
       pt.dataset.key = key;
@@ -2710,7 +2726,12 @@ function nextLine() {
       pt.classList.remove("in"); void pt.offsetWidth; pt.classList.add("in");
     }
     // 表情を切りかえる(同じキャラなら、絵だけ入れかえる)
-    if (chara) pt.querySelector("img").src = pickFace(chara, mood);
+    if (chara) {
+      const im = pt.querySelector("img");
+      im.src = pickFace(chara, mood);
+      im.style.height = chara.size ? Math.round(chara.size * 100) + "%" : "";   // size: 0.7 なら7割の大きさ
+      im.style.alignSelf = chara.size ? "center" : "";
+    }
     pt.classList.remove("dim");
   } else {
     pt.classList.add("dim");   // ナレーションや、絵のない人が話しているときは、前のイラストを暗くする
