@@ -7,7 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=44">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  // 古い画面が残らないように、開くたびに最新のファイルを読みこむ(数字を毎回変える)
+  window.__V = Date.now();
+  document.write('<link rel="stylesheet" href="style.css?t=' + window.__V + '">');
+</script>
 </head>
 <body>
 
@@ -347,7 +354,9 @@
   </div>
 </div>
 
-<script src="story.js?v=44"></script>
-<script src="game.js?v=44"></script>
+<script>
+  document.write('<script src="story.js?t=' + window.__V + '"><\/script>');
+  document.write('<script src="game.js?t=' + window.__V + '"><\/script>');
+</script>
 </body>
 </html>
