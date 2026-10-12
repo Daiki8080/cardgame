@@ -1985,6 +1985,25 @@ function effDmg(t, d, isAttack) {
 }
 
 // そのキャラが使う技と対象をえらぶ(使うと良い技がなければ null)
+// 相手キャラ1体を、このダメージでねらう価値(CPUが使う)
+function aiThreat(t) {   // そのキャラの技のいちばん大きいダメージ(こわさ)
+  return Math.max(isDmgSkill(t.a1) ? t.a1.dmg || 0 : 0, isDmgSkill(t.a2) ? t.a2.dmg || 0 : 0);
+}
+function aiTargetValue(t, dmg, stun) {
+  const e = effDmg(t, dmg, true);                 // 防御中は半分、お守り中は0
+  if (e <= 0) return -5;                          // お守りで0ダメージになる相手は、ねらわない
+  const real = Math.min(t.hp, e);
+  const kill = e >= t.hp;
+  let v = real;
+  if (kill) v += 30 + aiThreat(t) * 0.5 + t.maxHp * 0.1;   // たおせる!(強いキャラほどうれしい)
+  else {
+    v += (e / t.hp) * 12;                         // HPを大きくけずれる(HPが少ない相手ほど高い)
+    v += (1 - t.hp / t.maxHp) * 8;                // すでに弱っている相手
+    if (stun && !isStunned(t)) v += 10 + aiThreat(t) * 0.2;  // 強い相手をスタンで止める
+  }
+  if (t.guard) v -= 4;                            // 防御中の相手は、できればさける
+  return v;
+}
 function aiAction(side, ch) {
   const foeSide = foe(side);
   let best = null;
@@ -2005,7 +2024,10 @@ function aiAction(side, ch) {
       score = 22;
       target = t;
     } else if (isAllSkill(sk)) {
-      score = foeSide.field.filter(t => !t.heldBy).reduce((s, t) => s + Math.min(t.hp, effDmg(t, sk.dmg * mult, true)), 0) * 0.9;
+      // 全体攻撃:当たる全員の「ねらう価値」を足す(たおせるキャラがいると高い)
+      score = foeSide.field.filter(t => !t.heldBy && !t.escortedBy)
+        .reduce((s, t) => s + aiTargetValue(t, sk.dmg * mult, sk.type === "stunall"), 0) * 0.9;
+      score -= foeSide.field.filter(t => t.escorting && !t.amulet).reduce((s, t) => s + Math.min(ch.hp, t.escortDmg || 0) * 0.7, 0);
       if (sk.type === "stunall") score += foeSide.field.filter(t => !t.amulet && !isStunned(t)).length * 8;   // スタンのぶん、少し高く
     } else {
       if (sk.type === "sacrifice" && sk.self >= ch.hp) return;   // 自分がダウンしてしまう捨て身はしない
@@ -2013,19 +2035,23 @@ function aiAction(side, ch) {
       if (!canDirect(foeSide)) {
         let pool = targetsFor(foeSide);
         if (sk.type === "hold") { pool = holdTargets(foeSide); if (pool.length === 0) return; }
-        const noAmulet = pool.filter(t => !t.amulet);          // お守り中は0ダメージなので、さける
-        const ts = noAmulet.length > 0 ? noAmulet : pool;
-        const kill = ts.filter(t => effDmg(t, dmg, true) >= t.hp).sort((a, b) => b.hp - a.hp);
-        target = kill.length > 0 ? kill[0] : ts.slice().sort((a, b) => a.hp - b.hp)[0];
-        score = target.amulet ? 0 : Math.min(target.hp, effDmg(target, dmg, true)) + (kill.length > 0 ? 15 : 0);
+        // いちばん「ねらう価値」が高い相手をえらぶ
+        // (たおせる相手 → 強い技を持つ相手 → HPが少ない相手 → 防御・お守りをしていない相手 を優先)
+        let bestT = null, bestV = -1e9;
+        pool.forEach(t => {
+          let v = aiTargetValue(t, dmg, sk.type === "stun");
+          if (sk.type === "hold" && effDmg(t, dmg, true) < t.hp && !t.amulet) v += 6;          // つかまえて動けなくする
+          if (t.holding) v -= Math.min(t.holding.hp, dmg) * 0.8;                              // 自分のキャラにもダメージが行く
+          if (t.escorting && !t.amulet) v -= Math.min(ch.hp, t.escortDmg || 0) * 0.7;          // 攻撃返しを受ける
+          if (v > bestV) { bestV = v; bestT = t; }
+        });
+        target = bestT;
+        score = bestV;
       } else {
-        score = dmg * 1.2;                                       // 直接攻撃
+        // 直接攻撃。相手のHPを0にできるなら、いちばん優先
+        score = foeSide.hp <= dmg ? 999 : dmg * 1.5;
       }
       if (sk.type === "chance") score *= sk.pct / 100;
-      if (sk.type === "stun" && target && !isStunned(target) && !target.amulet) score += 10;
-      if (sk.type === "hold" && target && !target.amulet && target.hp > effDmg(target, dmg, true)) score += 6;
-      if (target && target.holding) score -= Math.min(target.holding.hp, dmg) * 0.8;   // 自分のキャラにもダメージが行く
-      if (target && target.escorting) score -= Math.min(ch.hp, target.escortDmg || 0) * 0.7;   // 攻撃返しを受ける
       if (sk.type === "sacrifice") score -= sk.self * 0.7;
     }
     if (score > 0 && (!best || score > best.score)) best = { n: n, target: target, score: score };
@@ -2109,10 +2135,19 @@ async function aiPlay(side) {
     if (G.over) return;
     if (ch.holding && ch.hp <= ch.maxHp * 0.3) { await doRelease(side, ch); await wait(500); continue; }   // あぶなくなったらホールドをやめる
     if (ch.escorting && (ch.hp <= ch.maxHp * 0.3 || ch.escorting.hp >= ch.escorting.maxHp * 0.8)) { await doEscortRelease(side, ch); await wait(500); continue; }
-    if (ch.acted || isStunned(ch) || isLocked(ch)) continue;   // スタン中・ホールド中は何もできない
-    const act = aiAction(side, ch);
-    if (!act) { await doGuard(side, ch); await wait(600); continue; }
-    await doSkill(side, ch, act.n, act.target);
+  }
+  // いちばん良い行動ができるキャラから順に動く(1体動くたびに、もう一度考えなおす)
+  while (!G.over) {
+    const ready = side.field.filter(ch => !ch.acted && !isStunned(ch) && !isLocked(ch));   // スタン中・ホールド中は何もできない
+    if (ready.length === 0) break;
+    let pick = null;
+    ready.forEach(ch => { const a = aiAction(side, ch); if (a && (!pick || a.score > pick.act.score)) pick = { ch, act: a }; });
+    if (!pick) {   // 使える技がなければ、残りは防御
+      for (const ch of ready) { await doGuard(side, ch); await wait(600); }
+      break;
+    }
+    const ok = await doSkill(side, pick.ch, pick.act.n, pick.act.target);
+    if (!ok) pick.ch.acted = true;   // 念のため(うまく使えなかったら、そのキャラは終わり)
     if (G.over) return;
     await wait(700);
   }
